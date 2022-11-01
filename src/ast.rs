@@ -1,16 +1,5 @@
-pub type Ident = String;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Token {
-    // general
-    LParen,
-    LSquare,
-    LCurly,
-    RParen,
-    RSquare,
-    RCurly,
-    End,
-
+pub enum Op {
     // prefix
     Not,
 
@@ -32,18 +21,6 @@ pub enum Token {
 
     // postfix
     Index,
-
-    // literal
-    Num,
-    String,
-    True,
-    False,
-    Array,
-
-    // special
-    Ident,
-    If,
-    Else,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,15 +35,14 @@ pub enum Literal {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
-    Ident(Ident),
-    PrefixOp {
-        op: Token,
-        expr: Box<Expr>,
-    },
-    InfixOp {
-        op: Token,
-        expr: Box<Expr>,
-    },
+    Ident(String),
+    Exp(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    Mod(Box<Expr>, Box<Expr>),
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
     Conditional {
         condition: Box<Expr>,
         inner: Box<Expr>,
@@ -99,5 +75,11 @@ impl From<bool> for Expr {
         } else {
             Self::Literal(Literal::False)
         }
+    }
+}
+
+impl From<Vec<Expr>> for Expr {
+    fn from(f: Vec<Expr>) -> Self {
+        Self::Literal(Literal::Array(f))
     }
 }

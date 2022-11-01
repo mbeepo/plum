@@ -1,6 +1,6 @@
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, Literal};
+use crate::ast::{Expr, Literal, Op};
 
 // a lot of this is very heavily based on the Chumsky JSON example
 // https://github.com/zesterer/chumsky/blob/master/examples/json.rs
@@ -26,6 +26,7 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             just('\\')
                 .or(just('/'))
                 .or(just('"'))
+                .or(just('\''))
                 .or(just('b').to('\x08'))
                 .or(just('f').to('\x0C'))
                 .or(just('n').to('\n'))
@@ -71,7 +72,9 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             .map(Expr::Literal)
             .labelled("array");
 
-        //
+        let op = |c| just(c).padded();
+
+        // output
         just("true")
             .to(Expr::Literal(Literal::True))
             .labelled("true")
@@ -81,6 +84,8 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             .or(string.map(Literal::String).map(Expr::Literal))
             .or(array)
             .or(text::ident().map(Expr::Ident))
+            .or(just('(').ignore_then(expr.then_ignore(just(')'))))
+            .or(op("**").to(Expr::Exp as fn(_, _) -> _).chain(expr))
     })
     .then_ignore(end().recover_with(skip_then_retry_until([])))
 }
@@ -137,6 +142,20 @@ mod tests {
     }
 
     #[test]
+    fn escaped_s_string() {
+        let parsed = parse().parse("'this is \\'nice\\' and \"cool\"'");
+
+        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
+    }
+
+    #[test]
+    fn escaped_d_string() {
+        let parsed = parse().parse("\"this is 'nice' and \\\"cool\\\"\"");
+
+        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
+    }
+
+    #[test]
     fn parse_true() {
         let parsed = parse().parse("true");
 
@@ -184,16 +203,9 @@ mod tests {
     }
 
     #[test]
-    fn escaped_s_string() {
-        let parsed = parse().parse("'this is \\'nice\\' and \"cool\"'");
+    fn parse_ident() {
+        let parsed = parse().parse("nice");
 
-        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
-    }
-
-    #[test]
-    fn escaped_d_string() {
-        let parsed = parse().parse("\"this is 'nice' and \\\"cool\\\"\"");
-
-        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
+        assert_eq!(parsed, Ok(Expr::Ident("nice".to_owned())));
     }
 }
