@@ -72,20 +72,54 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             .map(Expr::Literal)
             .labelled("array");
 
-        let op = |c| just(c).padded();
-
-        // output
-        just("true")
-            .to(Expr::Literal(Literal::True))
+        // any single value
+        let single = expr
+            .delimited_by(just('('), just(')'))
+            .or(just("true").to(Expr::Literal(Literal::True)))
             .labelled("true")
             .or(just("false").to(Expr::Literal(Literal::False)))
             .labelled("false")
             .or(num.map(Literal::Num).map(Expr::Literal))
             .or(string.map(Literal::String).map(Expr::Literal))
             .or(array)
-            .or(text::ident().map(Expr::Ident))
-            .or(just('(').ignore_then(expr.then_ignore(just(')'))))
-            .or(op("**").to(Expr::Exp as fn(_, _) -> _).chain(expr))
+            .or(text::ident().map(Expr::Ident));
+
+        let op = |c| just(c).padded();
+
+        let exp = single
+            .clone()
+            .then(
+                just("**")
+                    .to(Expr::Exp as fn(_, _) -> _)
+                    .then(single)
+                    .repeated(),
+            )
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+
+        let product = exp
+            .clone()
+            .then(
+                op('*')
+                    .to(Expr::Mul as fn(_, _) -> _)
+                    .or(op('/').to(Expr::Div as fn(_, _) -> _))
+                    .or(op('%').to(Expr::Mod as fn(_, _) -> _))
+                    .then(exp)
+                    .repeated(),
+            )
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+
+        let sum = product
+            .clone()
+            .then(
+                op('+')
+                    .to(Expr::Add as fn(_, _) -> _)
+                    .or(op('-').to(Expr::Sub as fn(_, _) -> _))
+                    .then(product)
+                    .repeated(),
+            )
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+
+        sum
     })
     .then_ignore(end().recover_with(skip_then_retry_until([])))
 }
