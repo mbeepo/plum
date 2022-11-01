@@ -1,3 +1,30 @@
+/*
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Op {
+    // prefix
+    Not,
+
+    // infix
+    Equals,
+    NotEquals,
+    And,
+    Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Exp,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+
+    // postfix
+    Index,
+}
+*/
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Num(f64),
