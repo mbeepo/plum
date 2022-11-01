@@ -1,28 +1,3 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Op {
-    // prefix
-    Not,
-
-    // infix
-    Equals,
-    NotEquals,
-    And,
-    Or,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Exp,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-
-    // postfix
-    Index,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Num(f64),
@@ -36,6 +11,15 @@ pub enum Literal {
 pub enum Expr {
     Literal(Literal),
     Ident(String),
+    Equals(Box<Expr>, Box<Expr>),
+    NotEquals(Box<Expr>, Box<Expr>),
+    Lt(Box<Expr>, Box<Expr>),
+    Gt(Box<Expr>, Box<Expr>),
+    Lte(Box<Expr>, Box<Expr>),
+    Gte(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+    Not(Box<Expr>),
     Exp(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),

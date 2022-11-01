@@ -1,6 +1,6 @@
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, Literal, Op};
+use crate::ast::{Expr, Literal};
 
 // a lot of this is very heavily based on the Chumsky JSON example
 // https://github.com/zesterer/chumsky/blob/master/examples/json.rs
@@ -90,6 +90,7 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             .clone()
             .then(
                 just("**")
+                    .padded()
                     .to(Expr::Exp as fn(_, _) -> _)
                     .then(single)
                     .repeated(),
@@ -241,5 +242,53 @@ mod tests {
         let parsed = parse().parse("nice");
 
         assert_eq!(parsed, Ok(Expr::Ident("nice".to_owned())));
+    }
+
+    #[test]
+    fn parse_mul() {
+        let parsed = parse().parse("3 * 7");
+
+        assert_eq!(
+            parsed,
+            Ok(Expr::Mul(
+                Box::new(Expr::from(3.0)),
+                Box::new(Expr::from(7.0))
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_add() {
+        let parsed = parse().parse("10 + 83");
+
+        assert_eq!(
+            parsed,
+            Ok(Expr::Add(
+                Box::new(Expr::from(10.0)),
+                Box::new(Expr::from(83.0))
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_chained() {
+        let parsed = parse().parse("10 + (30 - 5) * 3 ** 2");
+
+        assert_eq!(
+            parsed,
+            Ok(Expr::Add(
+                Box::new(Expr::from(10.0)),
+                Box::new(Expr::Mul(
+                    Box::new(Expr::Sub(
+                        Box::new(Expr::from(30.0)),
+                        Box::new(Expr::from(5.0))
+                    )),
+                    Box::new(Expr::Exp(
+                        Box::new(Expr::from(3.0)),
+                        Box::new(Expr::from(2.0))
+                    ))
+                ))
+            ))
+        );
     }
 }
