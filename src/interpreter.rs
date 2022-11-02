@@ -1,4 +1,9 @@
-use crate::{ast::Literal, errors::Error};
+use std::ops::Range;
+
+use crate::{
+    ast::{Expr, Literal, Spanned},
+    errors::Error,
+};
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -9,41 +14,22 @@ pub enum Value {
     Array(Vec<Value>),
 }
 
-impl From<f64> for Value {
-    fn from(f: f64) -> Self {
-        Self::Num(f)
-    }
-}
+#[derive(Clone, Debug)]
+pub struct SpannedValue(Value, Range<usize>);
 
-impl<'a> From<&'a str> for Value {
-    fn from(f: &'a str) -> Self {
-        Self::from(f.to_owned())
-    }
-}
-
-impl From<String> for Value {
-    fn from(f: String) -> Self {
-        Self::String(f)
-    }
-}
-
-impl From<bool> for Value {
-    fn from(f: bool) -> Self {
-        if f {
-            Self::True
-        } else {
-            Self::False
+impl From<Literal> for Value {
+    fn from(f: Literal) -> Self {
+        match f {
+            Literal::Num(e) => Self::Num(e),
+            Literal::String(e) => Self::String(e),
+            Literal::True => Self::True,
+            Literal::False => Self::False,
+            Literal::Array(e) => Self::Array(e),
         }
     }
 }
 
-impl From<Vec<Value>> for Value {
-    fn from(f: Vec<Value>) -> Self {
-        Self::Array(f)
-    }
-}
-
-impl Value {
+impl SpannedValue {
     fn pow(self, other: Self) -> Result<Self, Error> {
         match self {
             Self::Num(lhs) => match other {
@@ -54,24 +40,28 @@ impl Value {
                         Ok(Value::Num(lhs.powf(rhs)))
                     }
                 }
-                kind => Err(Error::WrongType(format!(
-                    "Expect Num on right side of **, got {}",
-                    kind
-                ))),
+                kind => Err(Error::WrongType {
+                    expected: Value::Num(0),
+                    got: kind,
+                    span: other.1,
+                }),
             },
-            kind => Err(Error::WrongType(format!(
-                "Expected Num on left side of **, got {}",
-                kind
-            ))),
+            kind => Err(Error::WrongType {
+                expected: Value::Num(0),
+                got: kind,
+                span: self.1,
+            }),
         }
     }
 }
 
-pub fn interpret<'a>(input: Value) -> Result<Value, crate::errors::Error> {
+pub fn interpret(input: Spanned) -> Result<Value, Vec<Error>> {
     match input {
-        Value::Literal(literal) => Ok(Value::from(literal)),
-        Value::Exp(lhs, rhs) => interpret(lhs).pow(interpret(rhs)),
-        Value::Add(lhs, rhs) => interpret(lhs) + interpret(rhs),
-        Value::Sub(lhs, rhs) => interpret(lhs) - interpret(rhs),
+        Spanned(Expr::Literal(literal), span) => Ok(Value::from(literal)),
+        Spanned(Expr::Exp(lhs, rhs), span) => Ok(flatten(*lhs)?.pow(flatten(*rhs)?)?),
+        Spanned(Expr::Add(lhs, rhs), span) => Ok(flatten(*lhs)? + flatten(*rhs)?),
+        Spanned(Expr::Sub(lhs, rhs), span) => Ok(flatten(*lhs)? - flatten(*rhs)?),
     }
 }
+
+pub fn flatten(input: Spanned) -> Result<SpannedValue, Vec<Error>> {}

@@ -1,4 +1,54 @@
 use std::fmt;
+use std::ops::Range;
+
+#[derive(Clone, Debug)]
+pub struct Spanned(pub Expr, pub Range<usize>);
+
+impl PartialEq<Spanned> for Spanned {
+    fn eq(&self, other: &Spanned) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl From<f64> for Spanned {
+    fn from(f: f64) -> Self {
+        Self(Expr::Literal(Literal::Num(f)), 0..1)
+    }
+}
+
+impl<'a> From<&'a str> for Spanned {
+    fn from(f: &'a str) -> Self {
+        Self::from(f.to_owned())
+    }
+}
+
+impl From<String> for Spanned {
+    fn from(f: String) -> Self {
+        Self(Expr::Literal(Literal::String(f)), 0..1)
+    }
+}
+
+impl From<bool> for Spanned {
+    fn from(f: bool) -> Self {
+        if f {
+            Self(Expr::Literal(Literal::True), 0..1)
+        } else {
+            Self(Expr::Literal(Literal::False), 0..1)
+        }
+    }
+}
+
+impl From<Vec<Spanned>> for Spanned {
+    fn from(f: Vec<Spanned>) -> Self {
+        Self(Expr::Literal(Literal::Array(f)), 0..1)
+    }
+}
+
+impl From<Expr> for Spanned {
+    fn from(f: Expr) -> Self {
+        Self(f, 0..1)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
@@ -6,33 +56,33 @@ pub enum Literal {
     String(String),
     True,
     False,
-    Array(Vec<Expr>),
+    Array(Vec<Spanned>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Ident(String),
-    Equals(Box<Expr>, Box<Expr>),
-    NotEquals(Box<Expr>, Box<Expr>),
-    Lt(Box<Expr>, Box<Expr>),
-    Gt(Box<Expr>, Box<Expr>),
-    Lte(Box<Expr>, Box<Expr>),
-    Gte(Box<Expr>, Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
-    Not(Box<Expr>),
-    Exp(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Mod(Box<Expr>, Box<Expr>),
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Index(Box<Expr>, Box<Expr>),
+    Equals(Box<Spanned>, Box<Spanned>),
+    NotEquals(Box<Spanned>, Box<Spanned>),
+    Lt(Box<Spanned>, Box<Spanned>),
+    Gt(Box<Spanned>, Box<Spanned>),
+    Lte(Box<Spanned>, Box<Spanned>),
+    Gte(Box<Spanned>, Box<Spanned>),
+    And(Box<Spanned>, Box<Spanned>),
+    Or(Box<Spanned>, Box<Spanned>),
+    Not(Box<Spanned>),
+    Exp(Box<Spanned>, Box<Spanned>),
+    Mul(Box<Spanned>, Box<Spanned>),
+    Div(Box<Spanned>, Box<Spanned>),
+    Mod(Box<Spanned>, Box<Spanned>),
+    Add(Box<Spanned>, Box<Spanned>),
+    Sub(Box<Spanned>, Box<Spanned>),
+    Index(Box<Spanned>, Box<Spanned>),
     Conditional {
-        condition: Box<Expr>,
-        inner: Box<Expr>,
-        other: Box<Expr>,
+        condition: Box<Spanned>,
+        inner: Box<Spanned>,
+        other: Box<Spanned>,
     },
 }
 
@@ -66,7 +116,13 @@ impl From<bool> for Expr {
 
 impl From<Vec<Expr>> for Expr {
     fn from(f: Vec<Expr>) -> Self {
-        Self::Literal(Literal::Array(f))
+        let spanned = Vec::<Spanned>::new();
+
+        for expr in f.iter() {
+            spanned.push(Spanned::from(*expr));
+        }
+
+        Self::Literal(Literal::Array(spanned))
     }
 }
 

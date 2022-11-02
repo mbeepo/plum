@@ -1,10 +1,6 @@
-use std::ops::Range;
-
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, Literal};
-
-pub struct Spanned(Expr, Range<usize>);
+use crate::ast::{Expr, Literal, Spanned};
 
 pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
     recursive(|expr| {
@@ -79,8 +75,9 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
         // any single value
         let single = expr
             .delimited_by(just('('), just(')'))
-            .or(just("true").to(Expr::Literal(Literal::True)))
-            .map_with_span(|expr, span| Spanned(expr, span))
+            .or(just("true")
+                .to(Expr::Literal(Literal::True))
+                .map_with_span(|expr, span| Spanned(expr, span)))
             .labelled("true")
             .or(just("false")
                 .to(Expr::Literal(Literal::False))
@@ -110,7 +107,11 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
                     .then(single)
                     .repeated(),
             )
-            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+            .foldl(|lhs, (op, rhs)| {
+                let range = lhs.1.start()..rhs.1.end();
+
+                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+            });
 
         let product = exp
             .clone()
@@ -122,8 +123,11 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
                     .then(exp)
                     .repeated(),
             )
-            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
-            .map_with_span(|expr, span| Spanned(expr, span));
+            .foldl(|lhs, (op, rhs)| {
+                let range = lhs.1.start()..rhs.1.end();
+
+                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+            });
 
         let sum = product
             .clone()
@@ -134,8 +138,11 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
                     .then(product)
                     .repeated(),
             )
-            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
-            .map_with_span(|expr, span| Spanned(expr, span));
+            .foldl(|lhs, (op, rhs)| {
+                let range = lhs.1.start()..rhs.1.end();
+
+                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+            });
 
         sum
     })
@@ -147,172 +154,170 @@ mod tests {
     use chumsky::Parser;
 
     use crate::{
-        ast::{Expr, Literal},
+        ast::{Expr, Literal, Spanned},
         parser::parse,
     };
 
     #[test]
     fn parse_int() {
-        let parsed = parse().parse("89");
+        let parsed = parse().parse("89").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(89.0)));
+        assert_eq!(parsed, Spanned::from(89.0));
     }
 
     #[test]
     fn parse_neg() {
-        let parsed = parse().parse("-23");
+        let parsed = parse().parse("-23").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(-23.0)));
+        assert_eq!(parsed, Spanned::from(-23.0));
     }
 
     #[test]
     fn parse_frac() {
-        let parsed = parse().parse("32.5892");
+        let parsed = parse().parse("32.5892").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(32.5892)));
+        assert_eq!(parsed, Spanned::from(32.5892));
     }
 
     #[test]
     fn parse_sci() {
-        let parsed = parse().parse("3e14");
+        let parsed = parse().parse("3e14").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(300000000000000.0)));
+        assert_eq!(parsed, Spanned::from(300000000000000.0));
     }
 
     #[test]
     fn parse_exp() {
-        let parsed = parse().parse("1.82e2");
+        let parsed = parse().parse("1.82e2").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(182.0)));
+        assert_eq!(parsed, Spanned::from(182.0));
     }
 
     #[test]
     fn parse_d_string() {
-        let parsed = parse().parse("\"nice\"");
+        let parsed = parse().parse("\"nice\"").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from("nice")));
+        assert_eq!(parsed, Spanned::from("nice"));
     }
 
     #[test]
     fn parse_s_string() {
-        let parsed = parse().parse("'cool'");
+        let parsed = parse().parse("'cool'").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from("cool")));
+        assert_eq!(parsed, Spanned::from("cool"));
     }
 
     #[test]
     fn escaped_s_string() {
-        let parsed = parse().parse("'this is \\'nice\\' and \"cool\"'");
+        let parsed = parse().parse("'this is \\'nice\\' and \"cool\"'").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
+        assert_eq!(parsed, Spanned::from("this is 'nice' and \"cool\""));
     }
 
     #[test]
     fn escaped_d_string() {
-        let parsed = parse().parse("\"this is 'nice' and \\\"cool\\\"\"");
+        let parsed = parse()
+            .parse("\"this is 'nice' and \\\"cool\\\"\"")
+            .unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from("this is 'nice' and \"cool\"")));
+        assert_eq!(parsed, Spanned::from("this is 'nice' and \"cool\""));
     }
 
     #[test]
     fn parse_true() {
-        let parsed = parse().parse("true");
+        let parsed = parse().parse("true").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(true)));
+        assert_eq!(parsed, Spanned::from(true));
     }
 
     #[test]
     fn parse_false() {
-        let parsed = parse().parse("false");
+        let parsed = parse().parse("false").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::from(false)));
+        assert_eq!(parsed, Spanned::from(false));
     }
 
     #[test]
     fn parse_num_array() {
-        let parsed = parse().parse("[1, 3.73, 2, 5.98e-2, 4]");
+        let parsed = parse().parse("[1, 3.73, 2, 5.98e-2, 4]").unwrap();
 
         assert_eq!(
-            parsed,
-            Ok(Expr::Literal(Literal::Array(vec![
-                Expr::from(1.0),
-                Expr::from(3.73),
-                Expr::from(2.0),
-                Expr::from(0.0598),
-                Expr::from(4.0)
-            ])))
+            parsed.0,
+            Expr::Literal(Literal::Array(vec![
+                Spanned::from(1.0),
+                Spanned::from(3.73),
+                Spanned::from(2.0),
+                Spanned::from(0.0598),
+                Spanned::from(4.0)
+            ]))
         );
     }
 
     #[test]
     fn parse_mixed_array() {
-        let parsed = parse().parse("[1, true, 2, false, 'nice', 935328.478]");
+        let parsed = parse()
+            .parse("[1, true, 2, false, 'nice', 935328.478]")
+            .unwrap();
 
         assert_eq!(
-            parsed,
-            Ok(Expr::Literal(Literal::Array(vec![
-                Expr::from(1.0),
-                Expr::from(true),
-                Expr::from(2.0),
-                Expr::from(false),
-                Expr::from("nice"),
-                Expr::from(935328.478)
-            ])))
+            parsed.0,
+            Expr::Literal(Literal::Array(vec![
+                Spanned::from(1.0),
+                Spanned::from(true),
+                Spanned::from(2.0),
+                Spanned::from(false),
+                Spanned::from("nice"),
+                Spanned::from(935328.478)
+            ]))
         );
     }
 
     #[test]
     fn parse_ident() {
-        let parsed = parse().parse("nice");
+        let parsed = parse().parse("nice").unwrap();
 
-        assert_eq!(parsed, Ok(Expr::Ident("nice".to_owned())));
+        assert_eq!(parsed.0, Expr::Ident("nice".to_owned()));
     }
 
     #[test]
     fn parse_mul() {
-        let parsed = parse().parse("3 * 7");
+        let parsed = parse().parse("3 * 7").unwrap();
 
         assert_eq!(
-            parsed,
-            Ok(Expr::Mul(
-                Box::new(Expr::from(3.0)),
-                Box::new(Expr::from(7.0))
-            ))
+            parsed.0,
+            Expr::Mul(Box::new(Spanned::from(3.0)), Box::new(Spanned::from(7.0)))
         );
     }
 
     #[test]
     fn parse_add() {
-        let parsed = parse().parse("10 + 83");
+        let parsed = parse().parse("10 + 83").unwrap();
 
         assert_eq!(
-            parsed,
-            Ok(Expr::Add(
-                Box::new(Expr::from(10.0)),
-                Box::new(Expr::from(83.0))
-            ))
+            parsed.0,
+            Expr::Add(Box::new(Spanned::from(10.0)), Box::new(Spanned::from(83.0)))
         );
     }
 
     #[test]
     fn parse_chained() {
-        let parsed = parse().parse("10 + (30 - 5) * 3 ** 2");
+        let parsed = parse().parse("10 + (30 - 5) * 3 ** 2").unwrap();
 
         assert_eq!(
-            parsed,
-            Ok(Expr::Add(
-                Box::new(Expr::from(10.0)),
-                Box::new(Expr::Mul(
-                    Box::new(Expr::Sub(
-                        Box::new(Expr::from(30.0)),
-                        Box::new(Expr::from(5.0))
-                    )),
-                    Box::new(Expr::Exp(
-                        Box::new(Expr::from(3.0)),
-                        Box::new(Expr::from(2.0))
-                    ))
-                ))
-            ))
+            parsed.0,
+            Expr::Add(
+                Box::new(Spanned::from(10.0)),
+                Box::new(Spanned::from(Expr::Mul(
+                    Box::new(Spanned::from(Expr::Sub(
+                        Box::new(Spanned::from(30.0)),
+                        Box::new(Spanned::from(5.0))
+                    ))),
+                    Box::new(Spanned::from(Expr::Exp(
+                        Box::new(Spanned::from(3.0)),
+                        Box::new(Spanned::from(2.0))
+                    )))
+                )))
+            )
         );
     }
 }

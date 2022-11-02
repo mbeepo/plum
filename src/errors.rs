@@ -2,13 +2,19 @@ use std::ops::Range;
 
 use chumsky::Span;
 
-use crate::ast::TokenKind;
+use crate::interpreter::Value;
 
 #[derive(Clone, Debug)]
 pub enum Error {
     WrongType {
-        expected: TokenKind,
-        got: TokenKind,
+        expected: Value,
+        got: Value,
         span: Range<usize>,
     },
+}
+
+impl From<Error> for Vec<Error> {
+    fn from(f: Error) -> Self {
+        vec![f]
+    }
 }
