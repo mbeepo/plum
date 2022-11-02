@@ -48,15 +48,21 @@ impl Value {
         match self {
             Self::Num(lhs) => match other {
                 Self::Num(rhs) => {
-                    if lhs == lhs as i64 && rhs == rhs as i64 {
-                        Ok(lhs.powi(rhs))
+                    if lhs == lhs.trunc() && rhs == rhs.trunc() {
+                        Ok(Value::Num(lhs.powi(rhs as i32)))
                     } else {
-                        Ok(lhs.powf(rhs))
+                        Ok(Value::Num(lhs.powf(rhs)))
                     }
                 }
-                kind => Error::WrongType(format!("Expect Num on right side of **, got {}", kind)),
+                kind => Err(Error::WrongType(format!(
+                    "Expect Num on right side of **, got {}",
+                    kind
+                ))),
             },
-            kind => Error::WrongType(format!("Expected Num on left side of **, got {}", kind)),
+            kind => Err(Error::WrongType(format!(
+                "Expected Num on left side of **, got {}",
+                kind
+            ))),
         }
     }
 }

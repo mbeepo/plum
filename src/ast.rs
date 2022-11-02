@@ -1,29 +1,4 @@
-/*
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Op {
-    // prefix
-    Not,
-
-    // infix
-    Equals,
-    NotEquals,
-    And,
-    Or,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Exp,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-
-    // postfix
-    Index,
-}
-*/
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
@@ -92,5 +67,105 @@ impl From<bool> for Expr {
 impl From<Vec<Expr>> for Expr {
     fn from(f: Vec<Expr>) -> Self {
         Self::Literal(Literal::Array(f))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TokenKind {
+    // ===== general =====
+    Ident,
+    Assign,
+    End,
+    Comma,
+    Access,
+    Whitespace,
+    Comment,
+    Error,
+    EOF,
+
+    // ===== containers =====
+    LCurly,
+    RCurly,
+    LSquare,
+    RSquare,
+    LParen,
+    RParen,
+
+    // ===== logic =====
+    Equals,
+    NotEquals,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+    Not,
+    If,
+    Else,
+
+    // ===== math =====
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Exp,
+
+    // ===== literal =====
+    String,
+    Num,
+    True,
+    False,
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", String::from(self))
+    }
+}
+
+impl From<&TokenKind> for String {
+    fn from(other: &TokenKind) -> String {
+        let out = match other {
+            TokenKind::Ident => "Ident",
+            TokenKind::Assign => "Assign",
+            TokenKind::End => "End",
+            TokenKind::Comma => "Comma",
+            TokenKind::Access => "Access",
+            TokenKind::Whitespace => "",
+            TokenKind::Comment => "Comment",
+            TokenKind::Error => "Error",
+            TokenKind::EOF => "EOF",
+            TokenKind::LCurly => "LCurly",
+            TokenKind::RCurly => "RCurly",
+            TokenKind::LSquare => "LSquare",
+            TokenKind::RSquare => "RSquare",
+            TokenKind::LParen => "LParen",
+            TokenKind::RParen => "RParen",
+            TokenKind::Equals => "Equals",
+            TokenKind::NotEquals => "NotEquals",
+            TokenKind::Lt => "Lt",
+            TokenKind::Gt => "Gt",
+            TokenKind::Lte => "Lte",
+            TokenKind::Gte => "Gte",
+            TokenKind::And => "And",
+            TokenKind::Or => "Or",
+            TokenKind::Not => "Not",
+            TokenKind::If => "If",
+            TokenKind::Else => "Else",
+            TokenKind::Add => "Add",
+            TokenKind::Sub => "Sub",
+            TokenKind::Mul => "Mul",
+            TokenKind::Div => "Div",
+            TokenKind::Mod => "Mod",
+            TokenKind::Exp => "Exp",
+            TokenKind::String => "String",
+            TokenKind::Num => "Num",
+            TokenKind::True => "True",
+            TokenKind::False => "False",
+        };
+
+        out.to_owned()
     }
 }

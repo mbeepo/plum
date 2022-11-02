@@ -1,16 +1,19 @@
+use std::ops::Range;
+
 use chumsky::prelude::*;
 
 use crate::ast::{Expr, Literal};
 
-// a lot of this is very heavily based on the Chumsky JSON example
-// https://github.com/zesterer/chumsky/blob/master/examples/json.rs
-pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
+pub struct Spanned(Expr, Range<usize>);
+
+pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
     recursive(|expr| {
         let frac = just('.').chain(text::digits(10));
         let exp = just('e')
             .or(just('E'))
             .chain(just('+').or(just('-')).or_not())
             .chain::<char, _, _>(text::digits(10));
+
         let num = just('-')
             .or_not()
             .chain::<char, _, _>(text::int(10))
@@ -70,19 +73,31 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
             .delimited_by(just('['), just(']'))
             .map(Literal::Array)
             .map(Expr::Literal)
+            .map_with_span(|expr, span| Spanned(expr, span))
             .labelled("array");
 
         // any single value
         let single = expr
             .delimited_by(just('('), just(')'))
             .or(just("true").to(Expr::Literal(Literal::True)))
+            .map_with_span(|expr, span| Spanned(expr, span))
             .labelled("true")
-            .or(just("false").to(Expr::Literal(Literal::False)))
+            .or(just("false")
+                .to(Expr::Literal(Literal::False))
+                .map_with_span(|expr, span| Spanned(expr, span)))
             .labelled("false")
-            .or(num.map(Literal::Num).map(Expr::Literal))
-            .or(string.map(Literal::String).map(Expr::Literal))
+            .or(num
+                .map(Literal::Num)
+                .map(Expr::Literal)
+                .map_with_span(|expr, span| Spanned(expr, span)))
+            .or(string
+                .map(Literal::String)
+                .map(Expr::Literal)
+                .map_with_span(|expr, span| Spanned(expr, span)))
             .or(array)
-            .or(text::ident().map(Expr::Ident));
+            .or(text::ident()
+                .map(Expr::Ident)
+                .map_with_span(|expr, span| Spanned(expr, span)));
 
         let op = |c| just(c).padded();
 
@@ -107,7 +122,8 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
                     .then(exp)
                     .repeated(),
             )
-            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
+            .map_with_span(|expr, span| Spanned(expr, span));
 
         let sum = product
             .clone()
@@ -118,7 +134,8 @@ pub fn parse() -> impl Parser<char, Expr, Error = Simple<char>> {
                     .then(product)
                     .repeated(),
             )
-            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)));
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
+            .map_with_span(|expr, span| Spanned(expr, span));
 
         sum
     })
@@ -153,6 +170,13 @@ mod tests {
         let parsed = parse().parse("32.5892");
 
         assert_eq!(parsed, Ok(Expr::from(32.5892)));
+    }
+
+    #[test]
+    fn parse_sci() {
+        let parsed = parse().parse("3e14");
+
+        assert_eq!(parsed, Ok(Expr::from(300000000000000.0)));
     }
 
     #[test]
