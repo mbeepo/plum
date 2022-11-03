@@ -1,6 +1,6 @@
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, Literal, Spanned};
+use crate::ast::{Expr, InfixOp, Literal, Spanned};
 
 pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
     recursive(|expr| {
@@ -76,11 +76,11 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
         let single = expr
             .delimited_by(just('('), just(')'))
             .or(just("true")
-                .to(Expr::Literal(Literal::True))
+                .to(Expr::Literal(Literal::Bool(true)))
                 .map_with_span(|expr, span| Spanned(expr, span)))
             .labelled("true")
             .or(just("false")
-                .to(Expr::Literal(Literal::False))
+                .to(Expr::Literal(Literal::Bool(false)))
                 .map_with_span(|expr, span| Spanned(expr, span)))
             .labelled("false")
             .or(num
@@ -100,48 +100,42 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
 
         let exp = single
             .clone()
-            .then(
-                just("**")
-                    .padded()
-                    .to(Expr::Exp as fn(_, _) -> _)
-                    .then(single)
-                    .repeated(),
-            )
+            .then(just("**").padded().to(InfixOp::Pow).then(single).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let range = lhs.1.start()..rhs.1.end();
 
-                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
             });
 
         let product = exp
             .clone()
             .then(
                 op('*')
-                    .to(Expr::Mul as fn(_, _) -> _)
-                    .or(op('/').to(Expr::Div as fn(_, _) -> _))
-                    .or(op('%').to(Expr::Mod as fn(_, _) -> _))
+                    .to(InfixOp::Mul)
+                    .or(op('/').to(InfixOp::Div))
+                    .or(op('%').to(InfixOp::Mod))
                     .then(exp)
                     .repeated(),
             )
             .foldl(|lhs, (op, rhs)| {
                 let range = lhs.1.start()..rhs.1.end();
 
-                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
             });
 
         let sum = product
             .clone()
             .then(
                 op('+')
-                    .to(Expr::Add as fn(_, _) -> _)
-                    .or(op('-').to(Expr::Sub as fn(_, _) -> _))
+                    .to(InfixOp::Add)
+                    .or(op('-').to(InfixOp::Sub))
                     .then(product)
                     .repeated(),
             )
             .foldl(|lhs, (op, rhs)| {
                 let range = lhs.1.start()..rhs.1.end();
 
-                Spanned(op(Box::new(lhs), Box::new(rhs)), range)
+                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
             });
 
         sum
@@ -154,7 +148,7 @@ mod tests {
     use chumsky::Parser;
 
     use crate::{
-        ast::{Expr, Literal, Spanned},
+        ast::{Expr, InfixOp, Literal, Spanned},
         parser::parse,
     };
 
@@ -285,7 +279,11 @@ mod tests {
 
         assert_eq!(
             parsed.0,
-            Expr::Mul(Box::new(Spanned::from(3.0)), Box::new(Spanned::from(7.0)))
+            Expr::InfixOp(
+                Box::new(Spanned::from(3.0)),
+                InfixOp::Mul,
+                Box::new(Spanned::from(7.0))
+            )
         );
     }
 
@@ -295,7 +293,11 @@ mod tests {
 
         assert_eq!(
             parsed.0,
-            Expr::Add(Box::new(Spanned::from(10.0)), Box::new(Spanned::from(83.0)))
+            Expr::InfixOp(
+                Box::new(Spanned::from(10.0)),
+                InfixOp::Add,
+                Box::new(Spanned::from(83.0))
+            )
         );
     }
 
@@ -305,15 +307,19 @@ mod tests {
 
         assert_eq!(
             parsed.0,
-            Expr::Add(
+            Expr::InfixOp(
                 Box::new(Spanned::from(10.0)),
-                Box::new(Spanned::from(Expr::Mul(
-                    Box::new(Spanned::from(Expr::Sub(
+                InfixOp::Add,
+                Box::new(Spanned::from(Expr::InfixOp(
+                    Box::new(Spanned::from(Expr::InfixOp(
                         Box::new(Spanned::from(30.0)),
+                        InfixOp::Sub,
                         Box::new(Spanned::from(5.0))
                     ))),
-                    Box::new(Spanned::from(Expr::Exp(
+                    InfixOp::Mul,
+                    Box::new(Spanned::from(Expr::InfixOp(
                         Box::new(Spanned::from(3.0)),
+                        InfixOp::Pow,
                         Box::new(Spanned::from(2.0))
                     )))
                 )))

@@ -1,15 +1,13 @@
-use std::ops::Range;
-
-use chumsky::Span;
-
-use crate::interpreter::Value;
+use crate::interpreter::{SpannedValue, ValueType};
 
 #[derive(Clone, Debug)]
 pub enum Error {
     WrongType {
-        expected: Value,
-        got: Value,
-        span: Range<usize>,
+        expected: Vec<ValueType>,
+        got: SpannedValue,
+    },
+    NeedsInt {
+        got: SpannedValue,
     },
 }
 

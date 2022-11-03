@@ -31,9 +31,9 @@ impl From<String> for Spanned {
 impl From<bool> for Spanned {
     fn from(f: bool) -> Self {
         if f {
-            Self(Expr::Literal(Literal::True), 0..1)
+            Self(Expr::Literal(Literal::Bool(true)), 0..1)
         } else {
-            Self(Expr::Literal(Literal::False), 0..1)
+            Self(Expr::Literal(Literal::Bool(false)), 0..1)
         }
     }
 }
@@ -54,30 +54,35 @@ impl From<Expr> for Spanned {
 pub enum Literal {
     Num(f64),
     String(String),
-    True,
-    False,
+    Bool(bool),
     Array(Vec<Spanned>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InfixOp {
+    Equals,
+    NotEquals,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+    Pow,
+    Mul,
+    Div,
+    Mod,
+    Add,
+    Sub,
+    In,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Ident(String),
-    Equals(Box<Spanned>, Box<Spanned>),
-    NotEquals(Box<Spanned>, Box<Spanned>),
-    Lt(Box<Spanned>, Box<Spanned>),
-    Gt(Box<Spanned>, Box<Spanned>),
-    Lte(Box<Spanned>, Box<Spanned>),
-    Gte(Box<Spanned>, Box<Spanned>),
-    And(Box<Spanned>, Box<Spanned>),
-    Or(Box<Spanned>, Box<Spanned>),
     Not(Box<Spanned>),
-    Exp(Box<Spanned>, Box<Spanned>),
-    Mul(Box<Spanned>, Box<Spanned>),
-    Div(Box<Spanned>, Box<Spanned>),
-    Mod(Box<Spanned>, Box<Spanned>),
-    Add(Box<Spanned>, Box<Spanned>),
-    Sub(Box<Spanned>, Box<Spanned>),
+    InfixOp(Box<Spanned>, InfixOp, Box<Spanned>),
     Index(Box<Spanned>, Box<Spanned>),
     Conditional {
         condition: Box<Spanned>,
@@ -106,11 +111,7 @@ impl From<String> for Expr {
 
 impl From<bool> for Expr {
     fn from(f: bool) -> Self {
-        if f {
-            Self::Literal(Literal::True)
-        } else {
-            Self::Literal(Literal::False)
-        }
+        Self::Literal(Literal::Bool(f))
     }
 }
 
