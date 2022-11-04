@@ -1,4 +1,5 @@
-use ariadne::{ColorGenerator, Label, Report, Fmt, Source};
+use ariadne::{ColorGenerator, Fmt, Label, Report, Source};
+use chumsky::prelude::Simple;
 
 use crate::{
     ast::InfixOp,
@@ -28,6 +29,7 @@ pub enum Error {
         index: usize,
         len: usize,
     },
+    SyntaxError {},
 }
 
 impl From<Error> for Vec<Error> {
@@ -37,7 +39,7 @@ impl From<Error> for Vec<Error> {
 }
 
 impl Error {
-    fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
+    pub fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
         let mut colors = ColorGenerator::new();
 
         match self {
@@ -45,40 +47,58 @@ impl Error {
                 expected,
                 got,
                 context,
-            } => match context {
-                TypeErrorCtx::InfixOpLhs { op } => {
-                    let a = colors.next();
-                    let b = colors.next();
+            } => {
+                match context {
+                    TypeErrorCtx::InfixOpLhs { op } => {
+                        let a = colors.next();
+                        let b = colors.next();
 
-                    let note = if expected.len() == 1 {
-                        format!(
-                            "Operator `{}` only takes values of type {}",
-                            op,
-                            expected[0].to_string().fg(b)
-                        )
-                    } else if expected.len() == 0 {
-						format!("Uh oh ! Operator `{}` doesn't expect *any* types... Call the dev !", op)
-					} else {
-						
-					}
+                        let note = if expected.len() == 1 {
+                            format!(
+                                "Operator `{}` only accept operands of type {}",
+                                op,
+                                expected[0].to_string().fg(b)
+                            )
+                        } else if expected.len() == 0 {
+                            format!("Uh oh ! Operator `{}` doesn't accept *any* types... Call the dev !", op)
+                        } else {
+                            format!(
+                                "Operator `{}` only accepts operands of type [{}]",
+                                op,
+                                stringify_expected(expected).fg(b)
+                            )
+                        };
 
-                    Report::build(ariadne::ReportKind::Error, source, offset)
-                        .with_code(1)
-                        .with_message(format!("Incompatible types"))
-                        .with_label(
-                            Label::new((source, got.1))
-                                .with_message(format!(
-                                    "This is of type {}",
-                                    got.0.get_type().to_string().fg(a)
-                                ))
-                                .with_color(a),
-                        )
-                        .with_note(note)
-                        .finish()
-                        .eprint((source_file, Source::from(source)))
-                        .unwrap();
+                        Report::build(ariadne::ReportKind::Error, source, offset)
+                            .with_code(1)
+                            .with_message(format!("Incompatible types"))
+                            .with_label(
+                                Label::new((source, got.clone().1))
+                                    .with_message(format!(
+                                        "This is of type {}",
+                                        got.0.get_type().to_string().fg(a)
+                                    ))
+                                    .with_color(a),
+                            )
+                            .with_note(note)
+                            .finish()
+                            .eprint((source_file, Source::from(source)))
+                            .unwrap();
+                    }
+                    _ => todo!(),
                 }
-            },
+            }
+            _ => todo!(),
         }
     }
+}
+
+fn stringify_expected(expected: &Vec<ValueType>) -> String {
+    let out = expected
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    out[..out.len() - 2].to_string()
 }
