@@ -1,5 +1,6 @@
 use crate::{
-    errors::Error,
+    ast::InfixOp,
+    errors::{Error, TypeErrorCtx},
     interpreter::{SpannedValue, Value, ValueType},
 };
 
@@ -15,32 +16,46 @@ impl SpannedValue {
                         Ok(Value::Num(lhs.powf(rhs)))
                     }
                 }
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Pow,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Pow },
             }),
         }
     }
 
     pub fn mul(self, other: Self) -> Result<Value, Error> {
         match self.0 {
-            Value::Num(lhs) => match other.0 {
+            // idk why i have to clone here but it wont compile if i dont
+            Value::Num(lhs) => match other.0.clone() {
                 Value::Num(rhs) => Ok(Value::Num(lhs * rhs)),
                 Value::String(rhs) => {
                     if lhs == lhs.trunc() {
                         Ok(Value::String(rhs.repeat(lhs as usize)))
                     } else {
-                        Err(Error::NeedsInt { got: self })
+                        Err(Error::TypeError {
+                            expected: ValueType::Int.into(),
+                            got: other,
+                            context: TypeErrorCtx::StringMul,
+                        })
                     }
                 }
-                _ => Err(Error::WrongType {
-                    expected: ValueType::Num.into(),
+                _ => Err(Error::TypeError {
+                    expected: vec![ValueType::Num, ValueType::String],
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Mul,
+                    },
                 }),
             },
             Value::String(lhs) => match other.0 {
@@ -48,17 +63,26 @@ impl SpannedValue {
                     if rhs == rhs.trunc() {
                         Ok(Value::String(lhs.repeat(rhs as usize)))
                     } else {
-                        Err(Error::NeedsInt { got: other })
+                        Err(Error::TypeError {
+                            expected: ValueType::Int.into(),
+                            got: other,
+                            context: TypeErrorCtx::StringMul,
+                        })
                     }
                 }
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::String,
+                        op: InfixOp::Mul,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
-                expected: ValueType::Num.into(),
+            _ => Err(Error::TypeError {
+                expected: vec![ValueType::Num, ValueType::String],
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Mul },
             }),
         }
     }
@@ -67,14 +91,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Num(lhs / rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Div,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Div },
             }),
         }
     }
@@ -83,14 +112,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Num(lhs % rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Mod,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Mod },
             }),
         }
     }
@@ -99,14 +133,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Num(lhs + rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Add,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Add },
             }),
         }
     }
@@ -115,14 +154,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Num(lhs - rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Sub,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Sub },
             }),
         }
     }
@@ -131,14 +175,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Bool(lhs < rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Lt,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Lt },
             }),
         }
     }
@@ -147,14 +196,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Bool(lhs > rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Gt,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Gt },
             }),
         }
     }
@@ -163,14 +217,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Bool(lhs <= rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Lte,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Lte },
             }),
         }
     }
@@ -179,14 +238,19 @@ impl SpannedValue {
         match self.0 {
             Value::Num(lhs) => match other.0 {
                 Value::Num(rhs) => Ok(Value::Bool(lhs >= rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Num.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Num,
+                        op: InfixOp::Gte,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Num.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Gte },
             }),
         }
     }
@@ -195,14 +259,19 @@ impl SpannedValue {
         match self.0 {
             Value::Bool(lhs) => match other.0 {
                 Value::Bool(rhs) => Ok(Value::Bool(lhs && rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Bool.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Bool,
+                        op: InfixOp::And,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Bool.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::And },
             }),
         }
     }
@@ -211,32 +280,103 @@ impl SpannedValue {
         match self.0 {
             Value::Bool(lhs) => match other.0 {
                 Value::Bool(rhs) => Ok(Value::Bool(lhs || rhs)),
-                _ => Err(Error::WrongType {
+                _ => Err(Error::TypeError {
                     expected: ValueType::Bool.into(),
                     got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs: ValueType::Bool,
+                        op: InfixOp::Or,
+                    },
                 }),
             },
-            _ => Err(Error::WrongType {
+            _ => Err(Error::TypeError {
                 expected: ValueType::Bool.into(),
                 got: self,
+                context: TypeErrorCtx::InfixOpLhs { op: InfixOp::Or },
             }),
         }
     }
 
     pub fn equals(self, other: Self) -> Result<Value, Error> {
-        match (self.0, other.0) {
+        match (self.0.clone(), other.0.clone()) {
             (Value::Num(lhs), Value::Num(rhs)) => Ok(Value::Bool(lhs == rhs)),
             (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs == rhs)),
             (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs == rhs)),
             (Value::Array(lhs), Value::Array(rhs)) => Ok(Value::Bool(lhs == rhs)),
-            _ => Err(Error::WrongType {
-                expected: self.0.get_type().into(),
-                got: other,
-            }),
+            _ => {
+                let lhs = self.0.get_type();
+
+                Err(Error::TypeError {
+                    expected: lhs.into(),
+                    got: other,
+                    context: TypeErrorCtx::InfixOpRhs {
+                        lhs,
+                        op: InfixOp::Equals,
+                    },
+                })
+            }
         }
     }
 
     pub fn is_in(self, other: Self) -> Result<Value, Error> {
         todo!()
+    }
+
+    pub fn not(self) -> Result<Value, Error> {
+        match self.0 {
+            Value::Bool(e) => Ok(Value::Bool(!e)),
+            _ => Err(Error::TypeError {
+                expected: ValueType::Bool.into(),
+                got: self,
+                context: TypeErrorCtx::Not,
+            }),
+        }
+    }
+
+    pub fn index(self, idx: Self) -> Result<Value, Error> {
+        match idx.0 {
+            Value::Num(e) => {
+                if e == e.trunc() {
+                    let e = e as usize;
+
+                    match self.0 {
+                        Value::Array(f) => {
+                            let len = f.len();
+
+                            if len > e {
+                                Ok(f[e].clone().0)
+                            } else {
+                                Err(Error::IndexError { index: e, len })
+                            }
+                        }
+                        Value::String(f) => {
+                            let len = f.len();
+
+                            if len > e {
+                                Ok(Value::String(f.chars().nth(e).unwrap().to_string()))
+                            } else {
+                                Err(Error::IndexError { index: e, len })
+                            }
+                        }
+                        _ => Err(Error::TypeError {
+                            expected: vec![ValueType::Array, ValueType::String],
+                            got: self,
+                            context: TypeErrorCtx::IndexOf,
+                        }),
+                    }
+                } else {
+                    Err(Error::TypeError {
+                        expected: ValueType::Int.into(),
+                        got: self,
+                        context: TypeErrorCtx::Index,
+                    })
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: ValueType::Num.into(),
+                got: idx,
+                context: TypeErrorCtx::Index,
+            }),
+        }
     }
 }

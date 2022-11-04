@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
@@ -77,6 +77,30 @@ pub enum InfixOp {
     In,
 }
 
+impl Display for InfixOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let out = match self {
+            Self::Equals => "Equals",
+            Self::NotEquals => "NotEquals",
+            Self::Lt => "Less",
+            Self::Gt => "Greater",
+            Self::Lte => "LessOrEqual",
+            Self::Gte => "GreaterOrEqual",
+            Self::And => "And",
+            Self::Or => "Or",
+            Self::Pow => "Pow",
+            Self::Mul => "Mul",
+            Self::Div => "Div",
+            Self::Mod => "Mod",
+            Self::Add => "Add",
+            Self::Sub => "Sub",
+            Self::In => "In",
+        };
+
+        write!(f, "{}", out)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
@@ -89,6 +113,8 @@ pub enum Expr {
         inner: Box<Spanned>,
         other: Box<Spanned>,
     },
+    Access(Box<Spanned>, Box<Spanned>),
+    Call(Box<Spanned>, Vec<Spanned>),
 }
 
 impl From<f64> for Expr {
@@ -117,10 +143,10 @@ impl From<bool> for Expr {
 
 impl From<Vec<Expr>> for Expr {
     fn from(f: Vec<Expr>) -> Self {
-        let spanned = Vec::<Spanned>::new();
+        let mut spanned = Vec::<Spanned>::new();
 
-        for expr in f.iter() {
-            spanned.push(Spanned::from(*expr));
+        for expr in f {
+            spanned.push(Spanned::from(expr));
         }
 
         Self::Literal(Literal::Array(spanned))
@@ -176,7 +202,7 @@ pub enum TokenKind {
     False,
 }
 
-impl fmt::Display for TokenKind {
+impl Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", String::from(self))
     }
