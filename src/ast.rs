@@ -10,6 +10,18 @@ impl PartialEq<Spanned> for Spanned {
     }
 }
 
+impl PartialEq<Spanned> for Expr {
+    fn eq(&self, other: &Spanned) -> bool {
+        self.eq(&other.0)
+    }
+}
+
+impl PartialEq<Expr> for Spanned {
+    fn eq(&self, other: &Expr) -> bool {
+        self.0.eq(other)
+    }
+}
+
 impl From<f64> for Spanned {
     fn from(f: f64) -> Self {
         Self(Expr::Literal(Literal::Num(f)), 0..1)
@@ -115,6 +127,7 @@ pub enum Expr {
     },
     Access(Box<Spanned>, Box<Spanned>),
     Call(Box<Spanned>, Vec<Spanned>),
+    Block(Vec<Spanned>),
 }
 
 impl From<f64> for Expr {

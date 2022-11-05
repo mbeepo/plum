@@ -18,6 +18,9 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
             .collect::<String>()
             .from_str()
             .unwrapped()
+            .map(Literal::Num)
+            .map(Expr::Literal)
+            .map_with_span(Spanned)
             .labelled("number");
 
         // string stuff
@@ -58,49 +61,92 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
             .collect::<String>()
             .labelled("string");
 
-        let string = d_string.or(s_string);
+        let string = d_string
+            .or(s_string)
+            .map(Literal::String)
+            .map(Expr::Literal)
+            .map_with_span(Spanned);
 
         // array stuff
         let array = expr
             .clone()
-            .chain(just(',').padded().ignore_then(expr.clone()).repeated())
-            .or_not()
-            .flatten()
+            .separated_by(just(',').padded())
+            .allow_trailing()
             .delimited_by(just('['), just(']'))
             .map(Literal::Array)
             .map(Expr::Literal)
-            .map_with_span(|expr, span| Spanned(expr, span))
+            .map_with_span(Spanned)
             .labelled("array");
+
+        // identifiers
+        let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
 
         // any single value
         let single = expr
+            .clone()
             .delimited_by(just('('), just(')'))
             .or(just("true")
                 .to(Expr::Literal(Literal::Bool(true)))
-                .map_with_span(|expr, span| Spanned(expr, span)))
+                .map_with_span(Spanned))
             .labelled("true")
             .or(just("false")
                 .to(Expr::Literal(Literal::Bool(false)))
-                .map_with_span(|expr, span| Spanned(expr, span)))
+                .map_with_span(Spanned))
             .labelled("false")
-            .or(num
-                .map(Literal::Num)
-                .map(Expr::Literal)
-                .map_with_span(|expr, span| Spanned(expr, span)))
-            .or(string
-                .map(Literal::String)
-                .map(Expr::Literal)
-                .map_with_span(|expr, span| Spanned(expr, span)))
+            .or(num)
+            .or(string)
             .or(array)
-            .or(text::ident()
-                .map(Expr::Ident)
-                .map_with_span(|expr, span| Spanned(expr, span)));
+            .or(ident);
 
+        // block for conditionals
+        let block = expr
+            .clone()
+            .then_ignore(just(';'))
+            .padded()
+            .repeated()
+            .at_least(1)
+            .map(Expr::Block)
+            .map_with_span(Spanned);
+
+        // conditionals
+        let conditional = recursive(|cond| {
+            just("if")
+                .ignore_then(expr)
+                .then_ignore(just('{').padded())
+                .then(block.clone())
+                .then_ignore(just('{').padded())
+                .then(
+                    just("else")
+                        .padded()
+                        .ignore_then(just('{').padded().ignore_then(block))
+                        .or(cond)
+                        .then_ignore(just('}').padded()),
+                )
+                .map(|((condition, inner), other)| Expr::Conditional {
+                    condition: Box::new(condition),
+                    inner: Box::new(inner),
+                    other: Box::new(other),
+                })
+                .map_with_span(Spanned)
+        });
+
+        let part = single.or(conditional);
+
+        // operators
         let op = |c| just(c).padded();
 
-        let exp = single
+        let index = part
             .clone()
-            .then(just("**").padded().to(InfixOp::Pow).then(single).repeated())
+            .then(part.clone().delimited_by(just('['), just(']')).repeated())
+            .foldl(|lhs, rhs| {
+                let range = lhs.1.start()..rhs.1.end();
+
+                Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), range)
+            });
+
+        let exp = index
+            .clone()
+            .then(just("**").padded().to(InfixOp::Pow).then(index).repeated())
             .foldl(|lhs, (op, rhs)| {
                 let range = lhs.1.start()..rhs.1.end();
 
@@ -325,5 +371,50 @@ mod tests {
                 )))
             )
         );
+    }
+
+    #[test]
+    fn parse_array_index() {
+        let parsed = parse().parse("[1, 2, 3, 4][3]").unwrap();
+
+        assert_eq!(
+            parsed.0,
+            Expr::Index(
+                Box::new(Spanned::from(vec![
+                    Spanned::from(1.0),
+                    Spanned::from(2.0),
+                    Spanned::from(3.0),
+                    Spanned::from(4.0)
+                ])),
+                Box::new(Spanned::from(3.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_conditional() {
+        let parsed = parse()
+            .parse(
+                "
+			if cool {
+				36;
+			} else {
+				nice;
+			}
+		",
+            )
+            .unwrap();
+
+        assert_eq!(
+            parsed.0,
+            Expr::Conditional {
+                condition: Box::new(Spanned(Expr::Ident("cool".to_owned()), 0..1)),
+                inner: Box::new(Spanned(Expr::Block(vec![Spanned::from(36.0)]), 0..1)),
+                other: Box::new(Spanned(
+                    Expr::Block(vec![Spanned(Expr::Ident("nice".to_owned()), 0..1)]),
+                    0..1
+                ))
+            }
+        )
     }
 }

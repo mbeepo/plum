@@ -249,7 +249,7 @@ mod tests {
 
     use crate::parser;
 
-    use super::{interpret, SpannedValue, Value};
+    use super::{interpret, Value};
 
     #[test]
     fn num() {
@@ -313,5 +313,21 @@ mod tests {
         let interpreted = interpret(parsed);
 
         assert!(interpreted.is_err())
+    }
+
+    #[test]
+    fn index_array() {
+        let parsed = parser::parse().parse("[1, 2, 3, 4][3]").unwrap();
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(interpreted, Value::Num(4.0))
+    }
+
+    #[test]
+    fn index_string() {
+        let parsed = parser::parse().parse("'nice'[3]").unwrap();
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(interpreted, Value::String("e".to_owned()))
     }
 }
