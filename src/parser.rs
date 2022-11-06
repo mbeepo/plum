@@ -3,71 +3,75 @@ use chumsky::prelude::*;
 use crate::ast::{Expr, InfixOp, Literal, Spanned};
 
 pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
+    let frac = just('.').chain(text::digits(10));
+    let exp = just('e')
+        .or(just('E'))
+        .chain(just('+').or(just('-')).or_not())
+        .chain::<char, _, _>(text::digits(10));
+
+    let num = just('-')
+        .or_not()
+        .chain::<char, _, _>(text::int(10))
+        .chain::<char, _, _>(frac.or_not().flatten())
+        .chain::<char, _, _>(exp.or_not().flatten())
+        .collect::<String>()
+        .from_str()
+        .unwrapped()
+        .map(Literal::Num)
+        .map(Expr::Literal)
+        .map_with_span(Spanned)
+        .labelled("number");
+
+    // string stuff
+    let escape = just('\\').ignore_then(
+        just('\\')
+            .or(just('/'))
+            .or(just('"'))
+            .or(just('\''))
+            .or(just('b').to('\x08'))
+            .or(just('f').to('\x0C'))
+            .or(just('n').to('\n'))
+            .or(just('r').to('\r'))
+            .or(just('t').to('\t'))
+            .or(just('u').ignore_then(
+                filter(|c: &char| c.is_digit(16))
+                    .repeated()
+                    .exactly(4)
+                    .collect::<String>()
+                    .validate(|digits, span, emit| {
+                        char::from_u32(u32::from_str_radix(&digits, 16).unwrap()).unwrap_or_else(
+                            || {
+                                emit(Simple::custom(span, "invalid unicode character"));
+                                '\u{FFFD}' // unicode replacement character
+                            },
+                        )
+                    }),
+            )),
+    );
+
+    let d_string = just('"')
+        .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
+        .then_ignore(just('"'))
+        .collect::<String>()
+        .labelled("string");
+
+    let s_string = just('\'')
+        .ignore_then(filter(|c| *c != '\\' && *c != '\'').or(escape).repeated())
+        .then_ignore(just('\''))
+        .collect::<String>()
+        .labelled("string");
+
+    let string = d_string
+        .or(s_string)
+        .map(Literal::String)
+        .map(Expr::Literal)
+        .map_with_span(Spanned);
+
+    // identifiers
+    let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
+
     recursive(|expr| {
         let raw_expr = recursive(|raw_expr| {
-            let frac = just('.').chain(text::digits(10));
-            let exp = just('e')
-                .or(just('E'))
-                .chain(just('+').or(just('-')).or_not())
-                .chain::<char, _, _>(text::digits(10));
-
-            let num = just('-')
-                .or_not()
-                .chain::<char, _, _>(text::int(10))
-                .chain::<char, _, _>(frac.or_not().flatten())
-                .chain::<char, _, _>(exp.or_not().flatten())
-                .collect::<String>()
-                .from_str()
-                .unwrapped()
-                .map(Literal::Num)
-                .map(Expr::Literal)
-                .map_with_span(Spanned)
-                .labelled("number");
-
-            // string stuff
-            let escape = just('\\').ignore_then(
-                just('\\')
-                    .or(just('/'))
-                    .or(just('"'))
-                    .or(just('\''))
-                    .or(just('b').to('\x08'))
-                    .or(just('f').to('\x0C'))
-                    .or(just('n').to('\n'))
-                    .or(just('r').to('\r'))
-                    .or(just('t').to('\t'))
-                    .or(just('u').ignore_then(
-                        filter(|c: &char| c.is_digit(16))
-                            .repeated()
-                            .exactly(4)
-                            .collect::<String>()
-                            .validate(|digits, span, emit| {
-                                char::from_u32(u32::from_str_radix(&digits, 16).unwrap())
-                                    .unwrap_or_else(|| {
-                                        emit(Simple::custom(span, "invalid unicode character"));
-                                        '\u{FFFD}' // unicode replacement character
-                                    })
-                            }),
-                    )),
-            );
-
-            let d_string = just('"')
-                .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
-                .then_ignore(just('"'))
-                .collect::<String>()
-                .labelled("string");
-
-            let s_string = just('\'')
-                .ignore_then(filter(|c| *c != '\\' && *c != '\'').or(escape).repeated())
-                .then_ignore(just('\''))
-                .collect::<String>()
-                .labelled("string");
-
-            let string = d_string
-                .or(s_string)
-                .map(Literal::String)
-                .map(Expr::Literal)
-                .map_with_span(Spanned);
-
             // array stuff
             let array = raw_expr
                 .clone()
@@ -79,11 +83,8 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
                 .map_with_span(Spanned)
                 .labelled("array");
 
-            // identifiers
-            let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
-
             // any single value
-            let single = raw_expr
+            let atomic = raw_expr
                 .clone()
                 .delimited_by(just('('), just(')'))
                 .or(just("true")
@@ -102,10 +103,10 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
             // operators
             let op = |c| just(c).padded();
 
-            let index = single
+            let index = atomic
                 .clone()
                 .then(
-                    single
+                    atomic
                         .clone()
                         .delimited_by(just('['), just(']'))
                         .repeated()
@@ -169,19 +170,20 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
             sum
         });
 
-        // block for conditionals
-        let block = expr
-            .clone()
-            .then_ignore(just(';'))
-            .padded()
-            .repeated()
-            .at_least(1)
-            .map(Expr::Block)
-            .map_with_span(Spanned)
-            .labelled("block");
-
-        // conditionals
         let conditional = recursive(|cond| {
+            // block for conditionals
+            let block = expr
+                .clone()
+                .then_ignore(just(';'))
+                .padded()
+                .or(cond.clone())
+                .repeated()
+                .at_least(1)
+                .map(Expr::Block)
+                .map_with_span(Spanned)
+                .labelled("block");
+
+            // conditionals
             text::keyword("if")
                 .ignore_then(raw_expr.clone())
                 .then_ignore(just('{').padded())
