@@ -4,99 +4,170 @@ use crate::ast::{Expr, InfixOp, Literal, Spanned};
 
 pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
     recursive(|expr| {
-        let frac = just('.').chain(text::digits(10));
-        let exp = just('e')
-            .or(just('E'))
-            .chain(just('+').or(just('-')).or_not())
-            .chain::<char, _, _>(text::digits(10));
+        let raw_expr = recursive(|raw_expr| {
+            let frac = just('.').chain(text::digits(10));
+            let exp = just('e')
+                .or(just('E'))
+                .chain(just('+').or(just('-')).or_not())
+                .chain::<char, _, _>(text::digits(10));
 
-        let num = just('-')
-            .or_not()
-            .chain::<char, _, _>(text::int(10))
-            .chain::<char, _, _>(frac.or_not().flatten())
-            .chain::<char, _, _>(exp.or_not().flatten())
-            .collect::<String>()
-            .from_str()
-            .unwrapped()
-            .map(Literal::Num)
-            .map(Expr::Literal)
-            .map_with_span(Spanned)
-            .labelled("number");
+            let num = just('-')
+                .or_not()
+                .chain::<char, _, _>(text::int(10))
+                .chain::<char, _, _>(frac.or_not().flatten())
+                .chain::<char, _, _>(exp.or_not().flatten())
+                .collect::<String>()
+                .from_str()
+                .unwrapped()
+                .map(Literal::Num)
+                .map(Expr::Literal)
+                .map_with_span(Spanned)
+                .labelled("number");
 
-        // string stuff
-        let escape = just('\\').ignore_then(
-            just('\\')
-                .or(just('/'))
-                .or(just('"'))
-                .or(just('\''))
-                .or(just('b').to('\x08'))
-                .or(just('f').to('\x0C'))
-                .or(just('n').to('\n'))
-                .or(just('r').to('\r'))
-                .or(just('t').to('\t'))
-                .or(just('u').ignore_then(
-                    filter(|c: &char| c.is_digit(16))
+            // string stuff
+            let escape = just('\\').ignore_then(
+                just('\\')
+                    .or(just('/'))
+                    .or(just('"'))
+                    .or(just('\''))
+                    .or(just('b').to('\x08'))
+                    .or(just('f').to('\x0C'))
+                    .or(just('n').to('\n'))
+                    .or(just('r').to('\r'))
+                    .or(just('t').to('\t'))
+                    .or(just('u').ignore_then(
+                        filter(|c: &char| c.is_digit(16))
+                            .repeated()
+                            .exactly(4)
+                            .collect::<String>()
+                            .validate(|digits, span, emit| {
+                                char::from_u32(u32::from_str_radix(&digits, 16).unwrap())
+                                    .unwrap_or_else(|| {
+                                        emit(Simple::custom(span, "invalid unicode character"));
+                                        '\u{FFFD}' // unicode replacement character
+                                    })
+                            }),
+                    )),
+            );
+
+            let d_string = just('"')
+                .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
+                .then_ignore(just('"'))
+                .collect::<String>()
+                .labelled("string");
+
+            let s_string = just('\'')
+                .ignore_then(filter(|c| *c != '\\' && *c != '\'').or(escape).repeated())
+                .then_ignore(just('\''))
+                .collect::<String>()
+                .labelled("string");
+
+            let string = d_string
+                .or(s_string)
+                .map(Literal::String)
+                .map(Expr::Literal)
+                .map_with_span(Spanned);
+
+            // array stuff
+            let array = raw_expr
+                .clone()
+                .separated_by(just(',').padded())
+                .allow_trailing()
+                .delimited_by(just('['), just(']'))
+                .map(Literal::Array)
+                .map(Expr::Literal)
+                .map_with_span(Spanned)
+                .labelled("array");
+
+            // identifiers
+            let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
+
+            // any single value
+            let single = raw_expr
+                .clone()
+                .delimited_by(just('('), just(')'))
+                .or(just("true")
+                    .to(Expr::Literal(Literal::Bool(true)))
+                    .map_with_span(Spanned))
+                .labelled("true")
+                .or(just("false")
+                    .to(Expr::Literal(Literal::Bool(false)))
+                    .map_with_span(Spanned))
+                .labelled("false")
+                .or(num)
+                .or(string)
+                .or(array)
+                .or(ident);
+
+            // operators
+            let op = |c| just(c).padded();
+
+            let index = single
+                .clone()
+                .then(
+                    single
+                        .clone()
+                        .delimited_by(just('['), just(']'))
                         .repeated()
-                        .exactly(4)
-                        .collect::<String>()
-                        .validate(|digits, span, emit| {
-                            char::from_u32(u32::from_str_radix(&digits, 16).unwrap())
-                                .unwrap_or_else(|| {
-                                    emit(Simple::custom(span, "invalid unicode character"));
-                                    '\u{FFFD}' // unicode replacement character
-                                })
-                        }),
-                )),
-        );
+                        .labelled("index"),
+                )
+                .foldl(|lhs, rhs| {
+                    let range = lhs.1.start()..rhs.1.end();
 
-        let d_string = just('"')
-            .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
-            .then_ignore(just('"'))
-            .collect::<String>()
-            .labelled("string");
+                    Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), range)
+                });
 
-        let s_string = just('\'')
-            .ignore_then(filter(|c| *c != '\\' && *c != '\'').or(escape).repeated())
-            .then_ignore(just('\''))
-            .collect::<String>()
-            .labelled("string");
+            let exp = index
+                .clone()
+                .then(
+                    just("**")
+                        .padded()
+                        .to(InfixOp::Pow)
+                        .then(index)
+                        .repeated()
+                        .labelled("exponent"),
+                )
+                .foldl(|lhs, (op, rhs)| {
+                    let range = lhs.1.start()..rhs.1.end();
 
-        let string = d_string
-            .or(s_string)
-            .map(Literal::String)
-            .map(Expr::Literal)
-            .map_with_span(Spanned);
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                });
 
-        // array stuff
-        let array = expr
-            .clone()
-            .separated_by(just(',').padded())
-            .allow_trailing()
-            .delimited_by(just('['), just(']'))
-            .map(Literal::Array)
-            .map(Expr::Literal)
-            .map_with_span(Spanned)
-            .labelled("array");
+            let product = exp
+                .clone()
+                .then(
+                    op('*')
+                        .to(InfixOp::Mul)
+                        .labelled("mul")
+                        .or(op('/').to(InfixOp::Div).labelled("div"))
+                        .or(op('%').to(InfixOp::Mod).labelled("mod"))
+                        .then(exp)
+                        .repeated(),
+                )
+                .foldl(|lhs, (op, rhs)| {
+                    let range = lhs.1.start()..rhs.1.end();
 
-        // identifiers
-        let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                });
 
-        // any single value
-        let single = expr
-            .clone()
-            .delimited_by(just('('), just(')'))
-            .or(just("true")
-                .to(Expr::Literal(Literal::Bool(true)))
-                .map_with_span(Spanned))
-            .labelled("true")
-            .or(just("false")
-                .to(Expr::Literal(Literal::Bool(false)))
-                .map_with_span(Spanned))
-            .labelled("false")
-            .or(num)
-            .or(string)
-            .or(array)
-            .or(ident);
+            let sum = product
+                .clone()
+                .then(
+                    op('+')
+                        .to(InfixOp::Add)
+                        .labelled("add")
+                        .or(op('-').to(InfixOp::Sub).labelled("sub"))
+                        .then(product)
+                        .repeated(),
+                )
+                .foldl(|lhs, (op, rhs)| {
+                    let range = lhs.1.start()..rhs.1.end();
+
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                });
+
+            sum
+        });
 
         // block for conditionals
         let block = expr
@@ -106,17 +177,18 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
             .repeated()
             .at_least(1)
             .map(Expr::Block)
-            .map_with_span(Spanned);
+            .map_with_span(Spanned)
+            .labelled("block");
 
         // conditionals
         let conditional = recursive(|cond| {
-            just("if")
-                .ignore_then(expr)
+            text::keyword("if")
+                .ignore_then(raw_expr.clone())
                 .then_ignore(just('{').padded())
                 .then(block.clone())
                 .then_ignore(just('{').padded())
                 .then(
-                    just("else")
+                    text::keyword("else")
                         .padded()
                         .ignore_then(just('{').padded().ignore_then(block))
                         .or(cond)
@@ -128,63 +200,10 @@ pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
                     other: Box::new(other),
                 })
                 .map_with_span(Spanned)
+                .labelled("conditional")
         });
 
-        let part = single.or(conditional);
-
-        // operators
-        let op = |c| just(c).padded();
-
-        let index = part
-            .clone()
-            .then(part.clone().delimited_by(just('['), just(']')).repeated())
-            .foldl(|lhs, rhs| {
-                let range = lhs.1.start()..rhs.1.end();
-
-                Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), range)
-            });
-
-        let exp = index
-            .clone()
-            .then(just("**").padded().to(InfixOp::Pow).then(index).repeated())
-            .foldl(|lhs, (op, rhs)| {
-                let range = lhs.1.start()..rhs.1.end();
-
-                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
-            });
-
-        let product = exp
-            .clone()
-            .then(
-                op('*')
-                    .to(InfixOp::Mul)
-                    .or(op('/').to(InfixOp::Div))
-                    .or(op('%').to(InfixOp::Mod))
-                    .then(exp)
-                    .repeated(),
-            )
-            .foldl(|lhs, (op, rhs)| {
-                let range = lhs.1.start()..rhs.1.end();
-
-                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
-            });
-
-        let sum = product
-            .clone()
-            .then(
-                op('+')
-                    .to(InfixOp::Add)
-                    .or(op('-').to(InfixOp::Sub))
-                    .then(product)
-                    .repeated(),
-            )
-            .foldl(|lhs, (op, rhs)| {
-                let range = lhs.1.start()..rhs.1.end();
-
-                Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
-            });
-
-        sum
+        conditional.or(raw_expr)
     })
     .then_ignore(end().recover_with(skip_then_retry_until([])))
 }
@@ -195,6 +214,7 @@ mod tests {
 
     use crate::{
         ast::{Expr, InfixOp, Literal, Spanned},
+        errors::ChumskyAriadne,
         parser::parse,
     };
 
@@ -393,27 +413,25 @@ mod tests {
 
     #[test]
     fn parse_conditional() {
-        let parsed = parse()
-            .parse(
-                "
-			if cool {
-				36;
-			} else {
-				nice;
-			}
-		",
-            )
-            .unwrap();
+        let input = "if cool {
+			36;
+		} else {
+			nice;
+		}";
+        let (parsed, errs) = parse().parse_recovery_verbose(input);
+
+        for err in errs {
+            err.display("[input]", input, 0)
+        }
 
         assert_eq!(
-            parsed.0,
+            parsed.unwrap(),
             Expr::Conditional {
-                condition: Box::new(Spanned(Expr::Ident("cool".to_owned()), 0..1)),
-                inner: Box::new(Spanned(Expr::Block(vec![Spanned::from(36.0)]), 0..1)),
-                other: Box::new(Spanned(
-                    Expr::Block(vec![Spanned(Expr::Ident("nice".to_owned()), 0..1)]),
-                    0..1
-                ))
+                condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                inner: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(36.0)]))),
+                other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(
+                    Expr::Ident("nice".to_owned())
+                )])))
             }
         )
     }

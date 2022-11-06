@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chumsky::Parser;
 
 use crate::{
+    errors::ChumskyAriadne,
     interpreter::{interpret, Value},
     parser::parse,
 };

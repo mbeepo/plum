@@ -38,8 +38,33 @@ impl From<Error> for Vec<Error> {
     }
 }
 
-impl Error {
-    pub fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
+pub trait ChumskyAriadne {
+    fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize);
+}
+
+impl ChumskyAriadne for Simple<char> {
+    fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
+        Report::build(ariadne::ReportKind::Error, source, offset)
+            .with_code(1)
+            .with_message("SyntaxError: Unexpected token")
+            .with_label(
+                Label::new((source_file, self.span()))
+                    .with_message(format!("{}", self))
+                    .with_color(ariadne::Color::Green),
+            )
+            .with_note(if let Some(e) = self.label() {
+                format!("Label is `{}`", e)
+            } else {
+                "No label".to_owned()
+            })
+            .finish()
+            .eprint((source_file, Source::from(source)))
+            .unwrap();
+    }
+}
+
+impl ChumskyAriadne for Error {
+    fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
         let mut colors = ColorGenerator::new();
 
         match self {
@@ -70,8 +95,8 @@ impl Error {
                         };
 
                         Report::build(ariadne::ReportKind::Error, source, offset)
-                            .with_code(1)
-                            .with_message(format!("Incompatible types"))
+                            .with_code(2)
+                            .with_message("Incompatible types")
                             .with_label(
                                 Label::new((source, got.clone().1))
                                     .with_message(format!(
