@@ -37,8 +37,8 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
                 });
 
             let atom = val
+                .or(assign)
                 .or(ident.map(Expr::Ident))
-                .or(assign.clone())
                 .or(array)
                 .map_with_span(Spanned)
                 .or(expr
@@ -73,21 +73,13 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
                         .repeated()
                         .labelled("index"),
                 )
-                .foldl(|lhs, rhs: Spanned| {
-                    let span = lhs.1.start()..rhs.1.end();
-
-                    Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), span)
-                });
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("**".to_owned())).to(InfixOp::Pow);
             let pow = index
                 .clone()
                 .then(op.then(index).repeated())
-                .foldl(|lhs, (op, rhs)| {
-                    let span = lhs.1.start..rhs.1.end;
-
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
-                });
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("*".to_owned()))
                 .labelled("multiply")
@@ -101,11 +93,7 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
             let product = pow
                 .clone()
                 .then(op.then(pow).repeated())
-                .foldl(|lhs, (op, rhs)| {
-                    let span = lhs.1.start..rhs.1.end;
-
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
-                });
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("+".to_owned()))
                 .labelled("add")
@@ -116,13 +104,25 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
             let sum = product
                 .clone()
                 .then(op.then(product).repeated())
-                .foldl(|lhs, (op, rhs)| {
-                    let span = lhs.1.start..rhs.1.end;
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
-                });
+            let op = just(Token::Op("&&".to_owned()))
+                .labelled("and")
+                .to(InfixOp::And);
+            let and = sum
+                .clone()
+                .then(op.then(sum).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            sum
+            let op = just(Token::Op("||".to_owned()))
+                .labelled("or")
+                .to(InfixOp::Or);
+            let and = and
+                .clone()
+                .then(op.then(and).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
+            and
         });
 
         let conditional = recursive(|cond| {
@@ -157,12 +157,18 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
     .then_ignore(end())
 }
 
+fn spannify(lhs: Spanned, op: InfixOp, rhs: Spanned) -> Spanned {
+    let span = lhs.1.start..rhs.1.end;
+
+    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
+}
+
 #[cfg(test)]
 mod tests {
     use chumsky::{Parser, Stream};
 
     use crate::{
-        ast::{Expr, InfixOp, Literal, Spanned},
+        ast::{Expr, InfixOp, Literal, Spanned, Token},
         errors::ChumskyAriadne,
         lexer::lexer,
         parser::parse,
@@ -304,7 +310,18 @@ mod tests {
 
     #[test]
     fn parse_assign() {
-        let lexed = lexer().parse("nice = 12").unwrap();
+        let lexed = lexer().parse("nice = 12;").unwrap();
+
+        assert_eq!(
+            lexed,
+            vec![
+                (Token::Ident("nice".to_owned()), 0..4),
+                (Token::Op("=".to_owned()), 5..6),
+                (Token::Num("12".to_owned()), 7..9),
+                (Token::Ctrl(';'), 9..10)
+            ]
+        );
+
         let parsed = parse()
             .parse(Stream::from_iter(9..10, lexed.into_iter()))
             .unwrap();
@@ -373,11 +390,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_assign_in_cond() {
+    fn parse_cond_assign() {
         let input = r#"if cool {
 			bees = "yeah";
 			36
-		else {
+		} else {
 			nice
 		}"#;
 
@@ -405,24 +422,10 @@ mod tests {
                     }),
                     Spanned::from(36.0)
                 ],),)),
-                other: Box::new(Spanned::from(Expr::Ident("nice".to_owned())))
+                other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(
+                    Expr::Ident("nice".to_owned())
+                )])))
             }
         )
-    }
-
-    #[test]
-    fn parse_big() {
-        let input = r#"beef = "nice";
-		cool = 34;
-		
-		epic = if beef != "epic" {
-			beef = "epic";
-			398
-		} else if cool * 2 < 100 {
-			beef = "not so cool";
-			cool * 2
-		} else {
-			100
-		}"#;
     }
 }
