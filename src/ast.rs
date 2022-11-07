@@ -64,6 +64,12 @@ impl From<Expr> for Spanned {
     }
 }
 
+impl From<Spanned> for Vec<Spanned> {
+    fn from(value: Spanned) -> Self {
+        vec![value]
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Num(f64),
@@ -133,7 +139,7 @@ pub enum Expr {
     Block(Vec<Spanned>),
     Assign {
         name: String,
-        val: Box<Spanned>,
+        value: Box<Spanned>,
     },
     Error,
 }

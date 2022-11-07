@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::ast::{Expr, InfixOp, Literal, Spanned, Token};
 
-pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
+pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let raw_expr = recursive(|raw_expr| {
             let val = select! {
@@ -33,7 +33,7 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
                 .then_ignore(just(Token::Ctrl(';')))
                 .map(|(name, val)| Expr::Assign {
                     name,
-                    val: Box::new(val),
+                    value: Box::new(val),
                 });
 
             let atom = val
@@ -73,7 +73,11 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
                         .repeated()
                         .labelled("index"),
                 )
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+                .foldl(|lhs, rhs: Spanned| {
+                    let span = lhs.1.start..rhs.1.end;
+
+                    Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), span)
+                });
 
             let op = just(Token::Op("**".to_owned())).to(InfixOp::Pow);
             let pow = index
@@ -117,12 +121,12 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
             let op = just(Token::Op("||".to_owned()))
                 .labelled("or")
                 .to(InfixOp::Or);
-            let and = and
+            let or = and
                 .clone()
                 .then(op.then(and).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            and
+            or
         });
 
         let conditional = recursive(|cond| {
@@ -154,6 +158,8 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
 
         conditional.or(raw_expr)
     })
+    .repeated()
+    .at_least(1)
     .then_ignore(end())
 }
 
@@ -168,51 +174,46 @@ mod tests {
     use chumsky::{Parser, Stream};
 
     use crate::{
-        ast::{Expr, InfixOp, Literal, Spanned, Token},
-        errors::ChumskyAriadne,
+        ast::{Expr, InfixOp, Literal, Spanned},
         lexer::lexer,
-        parser::parse,
+        parser,
     };
+
+    fn parse(input: &str) -> Vec<Spanned> {
+        let len = input.len();
+
+        let lexed = lexer().parse(input).unwrap();
+        parser::parse()
+            .parse(Stream::from_iter(len..len + 1, lexed.into_iter()))
+            .unwrap()
+    }
 
     #[test]
     fn parse_neg() {
-        let lexed = lexer().parse("-23").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(3..4, lexed.into_iter()))
-            .unwrap();
-
-        assert_eq!(parsed, Spanned::from(-23.0));
+        let parsed = parse("-23");
+        assert_eq!(parsed[0], Spanned::from(-23.0));
     }
 
     #[test]
     fn parse_frac() {
-        let lexed = lexer().parse("32.5892").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(7..8, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("32.5892");
 
-        assert_eq!(parsed, Spanned::from(32.5892));
+        assert_eq!(parsed[0], Spanned::from(32.5892));
     }
 
     #[test]
     fn parse_exp() {
-        let lexed = lexer().parse("1.82e2").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(6..7, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("1.82e2");
 
-        assert_eq!(parsed, Spanned::from(182.0));
+        assert_eq!(parsed[0], Spanned::from(182.0));
     }
 
     #[test]
     fn parse_num_array() {
-        let lexed = lexer().parse("[1, 3.73, 2, 5.98e-2, 4]").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(24..25, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("[1, 3.73, 2, 5.98e-2, 4]");
 
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::Literal(Literal::Array(vec![
                 Spanned::from(1.0),
                 Spanned::from(3.73),
@@ -225,15 +226,10 @@ mod tests {
 
     #[test]
     fn parse_mixed_array() {
-        let lexed = lexer()
-            .parse("[1, true, 2, false, 'nice', 935328.478]")
-            .unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(39..40, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("[1, true, 2, false, 'nice', 935328.478]");
 
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::Literal(Literal::Array(vec![
                 Spanned::from(1.0),
                 Spanned::from(true),
@@ -247,13 +243,9 @@ mod tests {
 
     #[test]
     fn parse_mul() {
-        let lexed = lexer().parse("3 * 7").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(5..6, lexed.into_iter()))
-            .unwrap();
-
+        let parsed = parse("3 * 7");
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::InfixOp(
                 Box::new(Spanned::from(3.0)),
                 InfixOp::Mul,
@@ -264,13 +256,10 @@ mod tests {
 
     #[test]
     fn parse_add() {
-        let lexed = lexer().parse("10 + 83").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(7..8, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("10 + 83");
 
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::InfixOp(
                 Box::new(Spanned::from(10.0)),
                 InfixOp::Add,
@@ -281,13 +270,10 @@ mod tests {
 
     #[test]
     fn parse_chained() {
-        let lexed = lexer().parse("10 + (30 - 5) * 3 ** 2").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(22..23, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("10 + (30 - 5) * 3 ** 2");
 
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::InfixOp(
                 Box::new(Spanned::from(10.0)),
                 InfixOp::Add,
@@ -310,40 +296,23 @@ mod tests {
 
     #[test]
     fn parse_assign() {
-        let lexed = lexer().parse("nice = 12;").unwrap();
+        let parsed = parse("nice = 12;");
 
         assert_eq!(
-            lexed,
-            vec![
-                (Token::Ident("nice".to_owned()), 0..4),
-                (Token::Op("=".to_owned()), 5..6),
-                (Token::Num("12".to_owned()), 7..9),
-                (Token::Ctrl(';'), 9..10)
-            ]
-        );
-
-        let parsed = parse()
-            .parse(Stream::from_iter(9..10, lexed.into_iter()))
-            .unwrap();
-
-        assert_eq!(
-            parsed,
+            parsed[0],
             Expr::Assign {
                 name: "nice".to_owned(),
-                val: Box::new(Spanned::from(12.0))
+                value: Box::new(Spanned::from(12.0))
             }
         )
     }
 
     #[test]
     fn parse_array_index() {
-        let lexed = lexer().parse("[1, 2, 3, 4][3]").unwrap();
-        let parsed = parse()
-            .parse(Stream::from_iter(15..16, lexed.into_iter()))
-            .unwrap();
+        let parsed = parse("[1, 2, 3, 4][3]");
 
         assert_eq!(
-            parsed.0,
+            parsed[0],
             Expr::Index(
                 Box::new(Spanned::from(vec![
                     Spanned::from(1.0),
@@ -358,27 +327,16 @@ mod tests {
 
     #[test]
     fn parse_conditional() {
-        let input = "if cool {
+        let parsed = parse(
+            "if cool {
 			36
 		} else {
 			nice
-		}";
-
-        let (lexed, errs) = lexer().parse_recovery(input);
-
-        for err in errs {
-            err.display("[input]", input, 0)
-        }
-
-        let (parsed, errs) =
-            parse().parse_recovery(Stream::from_iter(44..45, lexed.unwrap().into_iter()));
-
-        for err in errs {
-            err.display("[input]", input, 0)
-        }
+		}",
+        );
 
         assert_eq!(
-            parsed.unwrap(),
+            parsed[0],
             Expr::Conditional {
                 condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
                 inner: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(36.0)]))),
@@ -391,34 +349,23 @@ mod tests {
 
     #[test]
     fn parse_cond_assign() {
-        let input = r#"if cool {
+        let parsed = parse(
+            r#"if cool {
 			bees = "yeah";
 			36
 		} else {
 			nice
-		}"#;
-
-        let (lexed, errs) = lexer().parse_recovery(input);
-
-        for err in errs {
-            err.display("[input]", input, 0)
-        }
-
-        let (parsed, errs) =
-            parse().parse_recovery(Stream::from_iter(54..55, lexed.unwrap().into_iter()));
-
-        for err in errs {
-            err.display("[input]", input, 0)
-        }
+		}"#,
+        );
 
         assert_eq!(
-            parsed.unwrap(),
+            parsed[0],
             Expr::Conditional {
                 condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
                 inner: Box::new(Spanned::from(Expr::Block(vec![
                     Spanned::from(Expr::Assign {
                         name: "bees".to_owned(),
-                        val: Box::new(Spanned::from("yeah"))
+                        value: Box::new(Spanned::from("yeah"))
                     }),
                     Spanned::from(36.0)
                 ],),)),
@@ -427,5 +374,98 @@ mod tests {
                 )])))
             }
         )
+    }
+
+    #[test]
+    fn parse_and() {
+        let parsed = parse("cool && good");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                InfixOp::And,
+                Box::new(Spanned::from(Expr::Ident("good".to_owned())))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_or() {
+        let parsed = parse("cool || good");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                InfixOp::Or,
+                Box::new(Spanned::from(Expr::Ident("good".to_owned())))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_multiple_assign() {
+        let parsed = parse(
+            "cool = 3;
+		nice = cool + 7;
+		sick = false;",
+        );
+
+        assert_eq!(
+            parsed,
+            vec![
+                Expr::Assign {
+                    name: "cool".to_owned(),
+                    value: Box::new(Spanned::from(3.0))
+                },
+                Expr::Assign {
+                    name: "nice".to_owned(),
+                    value: Box::new(Spanned::from(Expr::InfixOp(
+                        Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                        InfixOp::Add,
+                        Box::new(Spanned::from(7.0))
+                    )))
+                },
+                Expr::Assign {
+                    name: "sick".to_owned(),
+                    value: Box::new(Spanned::from(false)),
+                }
+            ]
+        )
+    }
+
+    #[test]
+    fn parse_assign_to_conditional() {
+        let parsed = parse(
+            "cool = if nice {
+			30
+		} else {
+			10
+		};",
+        );
+
+        assert_eq!(
+            parsed[0],
+            Expr::Assign {
+                name: "cool".to_owned(),
+                value: Box::new(Spanned::from(Expr::Conditional {
+                    condition: Box::new(Spanned::from(Expr::Ident("nice".to_owned()))),
+                    inner: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(30.0)]))),
+                    other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(10.0)])))
+                }))
+            }
+        )
+    }
+
+    #[test]
+    fn parse_failed_bitwise() {
+        let input = "1 & 3";
+        let len = input.len();
+
+        let lexed = lexer().parse(input).unwrap();
+        let parsed = parser::parse().parse(Stream::from_iter(len..len + 1, lexed.into_iter()));
+
+        assert!(parsed.is_err())
     }
 }
