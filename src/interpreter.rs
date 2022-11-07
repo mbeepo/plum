@@ -57,7 +57,7 @@ impl From<Literal> for Value {
             Literal::Num(e) => Value::Num(e),
             Literal::String(e) => Value::String(e),
             Literal::Bool(e) => Value::Bool(e),
-            Literal::Array(_) => Value::Error,
+            _ => Value::Error,
         }
     }
 }
@@ -243,6 +243,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use chumsky::Parser;
@@ -331,3 +332,4 @@ mod tests {
         assert_eq!(interpreted, Value::String("e".to_owned()))
     }
 }
+*/

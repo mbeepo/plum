@@ -1,8 +1,10 @@
 use std::fmt::{self, Display};
 use std::ops::Range;
 
+pub type Span = Range<usize>;
+
 #[derive(Clone, Debug)]
-pub struct Spanned(pub Expr, pub Range<usize>);
+pub struct Spanned(pub Expr, pub Span);
 
 impl PartialEq<Spanned> for Spanned {
     fn eq(&self, other: &Spanned) -> bool {
@@ -68,6 +70,7 @@ pub enum Literal {
     String(String),
     Bool(bool),
     Array(Vec<Spanned>),
+    Null,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,6 +131,11 @@ pub enum Expr {
     Access(Box<Spanned>, Box<Spanned>),
     Call(Box<Spanned>, Vec<Spanned>),
     Block(Vec<Spanned>),
+    Assign {
+        name: String,
+        val: Box<Spanned>,
+    },
+    Error,
 }
 
 impl From<f64> for Expr {
@@ -166,102 +174,31 @@ impl From<Vec<Expr>> for Expr {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TokenKind {
-    // ===== general =====
-    Ident,
-    Assign,
-    End,
-    Comma,
-    Access,
-    Whitespace,
-    Comment,
-    Error,
-    EOF,
-
-    // ===== containers =====
-    LCurly,
-    RCurly,
-    LSquare,
-    RSquare,
-    LParen,
-    RParen,
-
-    // ===== logic =====
-    Equals,
-    NotEquals,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-    And,
-    Or,
-    Not,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Token {
+    Ident(String),
+    Ctrl(char),
+    Op(String),
     If,
     Else,
-
-    // ===== math =====
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Exp,
-
-    // ===== literal =====
-    String,
-    Num,
-    True,
-    False,
+    String(String),
+    Num(String),
+    Bool(bool),
+    Null,
 }
 
-impl Display for TokenKind {
+impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from(self))
-    }
-}
-
-impl From<&TokenKind> for String {
-    fn from(other: &TokenKind) -> String {
-        let out = match other {
-            TokenKind::Ident => "Ident",
-            TokenKind::Assign => "Assign",
-            TokenKind::End => "End",
-            TokenKind::Comma => "Comma",
-            TokenKind::Access => "Access",
-            TokenKind::Whitespace => "",
-            TokenKind::Comment => "Comment",
-            TokenKind::Error => "Error",
-            TokenKind::EOF => "EOF",
-            TokenKind::LCurly => "LCurly",
-            TokenKind::RCurly => "RCurly",
-            TokenKind::LSquare => "LSquare",
-            TokenKind::RSquare => "RSquare",
-            TokenKind::LParen => "LParen",
-            TokenKind::RParen => "RParen",
-            TokenKind::Equals => "Equals",
-            TokenKind::NotEquals => "NotEquals",
-            TokenKind::Lt => "Lt",
-            TokenKind::Gt => "Gt",
-            TokenKind::Lte => "Lte",
-            TokenKind::Gte => "Gte",
-            TokenKind::And => "And",
-            TokenKind::Or => "Or",
-            TokenKind::Not => "Not",
-            TokenKind::If => "If",
-            TokenKind::Else => "Else",
-            TokenKind::Add => "Add",
-            TokenKind::Sub => "Sub",
-            TokenKind::Mul => "Mul",
-            TokenKind::Div => "Div",
-            TokenKind::Mod => "Mod",
-            TokenKind::Exp => "Exp",
-            TokenKind::String => "String",
-            TokenKind::Num => "Num",
-            TokenKind::True => "True",
-            TokenKind::False => "False",
-        };
-
-        out.to_owned()
+        match self {
+            Token::Ident(e) => write!(f, "{}", e),
+            Token::Ctrl(e) => write!(f, "{}", e),
+            Token::Op(e) => write!(f, "{}", e),
+            Token::If => write!(f, "If"),
+            Token::Else => write!(f, "Else"),
+            Token::String(e) => write!(f, "{}", e),
+            Token::Num(e) => write!(f, "{}", e),
+            Token::Bool(e) => write!(f, "{}", e),
+            Token::Null => write!(f, "Null"),
+        }
     }
 }

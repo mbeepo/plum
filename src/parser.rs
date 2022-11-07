@@ -1,307 +1,181 @@
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, InfixOp, Literal, Spanned};
+use crate::ast::{Expr, InfixOp, Literal, Spanned, Token};
 
-pub fn parse() -> impl Parser<char, Spanned, Error = Simple<char>> {
-    let frac = just('.').chain(text::digits(10));
-    let exp = just('e')
-        .or(just('E'))
-        .chain(just('+').or(just('-')).or_not())
-        .chain::<char, _, _>(text::digits(10));
-
-    let num = just('-')
-        .or_not()
-        .chain::<char, _, _>(text::int(10))
-        .chain::<char, _, _>(frac.or_not().flatten())
-        .chain::<char, _, _>(exp.or_not().flatten())
-        .collect::<String>()
-        .from_str()
-        .unwrapped()
-        .map(Literal::Num)
-        .map(Expr::Literal)
-        .map_with_span(Spanned)
-        .labelled("number");
-
-    // string stuff
-    let escape = just('\\').ignore_then(
-        just('\\')
-            .or(just('/'))
-            .or(just('"'))
-            .or(just('\''))
-            .or(just('b').to('\x08'))
-            .or(just('f').to('\x0C'))
-            .or(just('n').to('\n'))
-            .or(just('r').to('\r'))
-            .or(just('t').to('\t'))
-            .or(just('u').ignore_then(
-                filter(|c: &char| c.is_digit(16))
-                    .repeated()
-                    .exactly(4)
-                    .collect::<String>()
-                    .validate(|digits, span, emit| {
-                        char::from_u32(u32::from_str_radix(&digits, 16).unwrap()).unwrap_or_else(
-                            || {
-                                emit(Simple::custom(span, "invalid unicode character"));
-                                '\u{FFFD}' // unicode replacement character
-                            },
-                        )
-                    }),
-            )),
-    );
-
-    let d_string = just('"')
-        .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
-        .then_ignore(just('"'))
-        .collect::<String>()
-        .labelled("string");
-
-    let s_string = just('\'')
-        .ignore_then(filter(|c| *c != '\\' && *c != '\'').or(escape).repeated())
-        .then_ignore(just('\''))
-        .collect::<String>()
-        .labelled("string");
-
-    let string = d_string
-        .or(s_string)
-        .map(Literal::String)
-        .map(Expr::Literal)
-        .map_with_span(Spanned);
-
-    // identifiers
-    let ident = text::ident().map(Expr::Ident).map_with_span(Spanned);
-
+pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let raw_expr = recursive(|raw_expr| {
-            // array stuff
-            let array = raw_expr
+            let val = select! {
+                Token::Num(e) => Expr::from(e.parse::<f64>().unwrap()),
+                Token::String(e) => Expr::from(e),
+                Token::Bool(e) => Expr::from(e),
+                Token::Null => Expr::Literal(Literal::Null),
+            }
+            .labelled("value");
+
+            let ident = select! { Token::Ident(ident) => ident.clone() }.labelled("identifier");
+
+            // Array items
+            let items = expr
                 .clone()
-                .separated_by(just(',').padded())
-                .allow_trailing()
-                .delimited_by(just('['), just(']'))
+                .separated_by(just(Token::Ctrl(',')))
+                .allow_trailing();
+
+            let array = items
+                .clone()
+                .delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
                 .map(Literal::Array)
-                .map(Expr::Literal)
-                .map_with_span(Spanned)
-                .labelled("array");
+                .map(Expr::Literal);
 
-            // any single value
-            let atomic = raw_expr
-                .clone()
-                .delimited_by(just('('), just(')'))
-                .or(just("true")
-                    .to(Expr::Literal(Literal::Bool(true)))
-                    .map_with_span(Spanned))
-                .labelled("true")
-                .or(just("false")
-                    .to(Expr::Literal(Literal::Bool(false)))
-                    .map_with_span(Spanned))
-                .labelled("false")
-                .or(num)
-                .or(string)
+            let assign = ident
+                .then_ignore(just(Token::Op("=".to_owned())))
+                .then(raw_expr.clone())
+                .then_ignore(just(Token::Ctrl(';')))
+                .then(expr.clone())
+                .map(|((name, val), then)| Expr::Assign {
+                    name,
+                    val: Box::new(val),
+                });
+
+            let atom = val
+                .or(ident.map(Expr::Ident))
+                .or(assign)
                 .or(array)
-                .or(ident);
+                .map_with_span(Spanned)
+                .or(expr
+                    .clone()
+                    .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
+                .recover_with(nested_delimiters(
+                    Token::Ctrl('('),
+                    Token::Ctrl(')'),
+                    [
+                        (Token::Ctrl('['), Token::Ctrl(']')),
+                        (Token::Ctrl('{'), Token::Ctrl('}')),
+                    ],
+                    |span| Spanned(Expr::Error, span),
+                ))
+                // Attempt to recover anything that looks like a list but contains errors
+                .recover_with(nested_delimiters(
+                    Token::Ctrl('['),
+                    Token::Ctrl(']'),
+                    [
+                        (Token::Ctrl('('), Token::Ctrl(')')),
+                        (Token::Ctrl('{'), Token::Ctrl('}')),
+                    ],
+                    |span| Spanned(Expr::Error, span),
+                ));
 
-            // operators
-            let op = |c| just(c).padded();
-
-            let index = atomic
+            let index = atom
                 .clone()
                 .then(
-                    atomic
+                    raw_expr
                         .clone()
-                        .delimited_by(just('['), just(']'))
+                        .delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
                         .repeated()
                         .labelled("index"),
                 )
                 .foldl(|lhs, rhs| {
-                    let range = lhs.1.start()..rhs.1.end();
+                    let span = lhs.1.start()..rhs.1.end();
 
-                    Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), range)
+                    Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), span)
                 });
 
-            let exp = index
+            let op = just(Token::Op("**".to_owned())).to(InfixOp::Pow);
+            let pow = index
                 .clone()
-                .then(
-                    just("**")
-                        .padded()
-                        .to(InfixOp::Pow)
-                        .then(index)
-                        .repeated()
-                        .labelled("exponent"),
-                )
+                .then(op.then(index).repeated())
                 .foldl(|lhs, (op, rhs)| {
-                    let range = lhs.1.start()..rhs.1.end();
+                    let span = lhs.1.start..rhs.1.end;
 
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
                 });
 
-            let product = exp
+            let op = just(Token::Op("*".to_owned()))
+                .labelled("multiply")
+                .to(InfixOp::Mul)
+                .or(just(Token::Op("/".to_owned()))
+                    .labelled("divide")
+                    .to(InfixOp::Div))
+                .or(just(Token::Op("%".to_owned()))
+                    .labelled("modulus")
+                    .to(InfixOp::Mod));
+            let product = pow
                 .clone()
-                .then(
-                    op('*')
-                        .to(InfixOp::Mul)
-                        .labelled("mul")
-                        .or(op('/').to(InfixOp::Div).labelled("div"))
-                        .or(op('%').to(InfixOp::Mod).labelled("mod"))
-                        .then(exp)
-                        .repeated(),
-                )
+                .then(op.then(pow).repeated())
                 .foldl(|lhs, (op, rhs)| {
-                    let range = lhs.1.start()..rhs.1.end();
+                    let span = lhs.1.start..rhs.1.end;
 
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
                 });
 
+            let op = just(Token::Op("+".to_owned()))
+                .labelled("add")
+                .to(InfixOp::Add)
+                .or(just(Token::Op("-".to_owned()))
+                    .labelled("subtract")
+                    .to(InfixOp::Sub));
             let sum = product
                 .clone()
-                .then(
-                    op('+')
-                        .to(InfixOp::Add)
-                        .labelled("add")
-                        .or(op('-').to(InfixOp::Sub).labelled("sub"))
-                        .then(product)
-                        .repeated(),
-                )
+                .then(op.then(product).repeated())
                 .foldl(|lhs, (op, rhs)| {
-                    let range = lhs.1.start()..rhs.1.end();
+                    let span = lhs.1.start..rhs.1.end;
 
-                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), range)
+                    Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
                 });
-
-            sum
         });
 
-        let conditional = recursive(|cond| {
-            // block for conditionals
-            let block = expr
-                .clone()
-                .then_ignore(just(';'))
-                .padded()
-                .or(cond.clone())
-                .repeated()
-                .at_least(1)
-                .map(Expr::Block)
-                .map_with_span(Spanned)
-                .labelled("block");
-
-            // conditionals
-            text::keyword("if")
-                .ignore_then(raw_expr.clone())
-                .then_ignore(just('{').padded())
-                .then(block.clone())
-                .then_ignore(just('{').padded())
-                .then(
-                    text::keyword("else")
-                        .padded()
-                        .ignore_then(just('{').padded().ignore_then(block))
-                        .or(cond)
-                        .then_ignore(just('}').padded()),
-                )
-                .map(|((condition, inner), other)| Expr::Conditional {
-                    condition: Box::new(condition),
-                    inner: Box::new(inner),
-                    other: Box::new(other),
-                })
-                .map_with_span(Spanned)
-                .labelled("conditional")
-        });
-
-        conditional.or(raw_expr)
+        raw_expr
     })
-    .then_ignore(end().recover_with(skip_then_retry_until([])))
+    .then_ignore(end())
 }
 
 #[cfg(test)]
 mod tests {
-    use chumsky::Parser;
+    use chumsky::{Parser, Stream};
 
     use crate::{
         ast::{Expr, InfixOp, Literal, Spanned},
         errors::ChumskyAriadne,
+        lexer::lexer,
         parser::parse,
     };
 
     #[test]
-    fn parse_int() {
-        let parsed = parse().parse("89").unwrap();
-
-        assert_eq!(parsed, Spanned::from(89.0));
-    }
-
-    #[test]
     fn parse_neg() {
-        let parsed = parse().parse("-23").unwrap();
+        let lexed = lexer().parse("-23").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(3..4, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(parsed, Spanned::from(-23.0));
     }
 
     #[test]
     fn parse_frac() {
-        let parsed = parse().parse("32.5892").unwrap();
+        let lexed = lexer().parse("32.5892").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(7..8, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(parsed, Spanned::from(32.5892));
     }
 
     #[test]
-    fn parse_sci() {
-        let parsed = parse().parse("3e14").unwrap();
-
-        assert_eq!(parsed, Spanned::from(300000000000000.0));
-    }
-
-    #[test]
     fn parse_exp() {
-        let parsed = parse().parse("1.82e2").unwrap();
+        let lexed = lexer().parse("1.82e2").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(6..7, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(parsed, Spanned::from(182.0));
     }
 
     #[test]
-    fn parse_d_string() {
-        let parsed = parse().parse("\"nice\"").unwrap();
-
-        assert_eq!(parsed, Spanned::from("nice"));
-    }
-
-    #[test]
-    fn parse_s_string() {
-        let parsed = parse().parse("'cool'").unwrap();
-
-        assert_eq!(parsed, Spanned::from("cool"));
-    }
-
-    #[test]
-    fn escaped_s_string() {
-        let parsed = parse().parse("'this is \\'nice\\' and \"cool\"'").unwrap();
-
-        assert_eq!(parsed, Spanned::from("this is 'nice' and \"cool\""));
-    }
-
-    #[test]
-    fn escaped_d_string() {
-        let parsed = parse()
-            .parse("\"this is 'nice' and \\\"cool\\\"\"")
-            .unwrap();
-
-        assert_eq!(parsed, Spanned::from("this is 'nice' and \"cool\""));
-    }
-
-    #[test]
-    fn parse_true() {
-        let parsed = parse().parse("true").unwrap();
-
-        assert_eq!(parsed, Spanned::from(true));
-    }
-
-    #[test]
-    fn parse_false() {
-        let parsed = parse().parse("false").unwrap();
-
-        assert_eq!(parsed, Spanned::from(false));
-    }
-
-    #[test]
     fn parse_num_array() {
-        let parsed = parse().parse("[1, 3.73, 2, 5.98e-2, 4]").unwrap();
+        let lexed = lexer().parse("[1, 3.73, 2, 5.98e-2, 4]").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(24..25, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(
             parsed.0,
@@ -317,8 +191,11 @@ mod tests {
 
     #[test]
     fn parse_mixed_array() {
-        let parsed = parse()
+        let lexed = lexer()
             .parse("[1, true, 2, false, 'nice', 935328.478]")
+            .unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(39..40, lexed.into_iter()))
             .unwrap();
 
         assert_eq!(
@@ -335,15 +212,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_ident() {
-        let parsed = parse().parse("nice").unwrap();
-
-        assert_eq!(parsed.0, Expr::Ident("nice".to_owned()));
-    }
-
-    #[test]
     fn parse_mul() {
-        let parsed = parse().parse("3 * 7").unwrap();
+        let lexed = lexer().parse("3 * 7").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(5..6, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(
             parsed.0,
@@ -357,7 +230,10 @@ mod tests {
 
     #[test]
     fn parse_add() {
-        let parsed = parse().parse("10 + 83").unwrap();
+        let lexed = lexer().parse("10 + 83").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(7..8, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(
             parsed.0,
@@ -371,7 +247,10 @@ mod tests {
 
     #[test]
     fn parse_chained() {
-        let parsed = parse().parse("10 + (30 - 5) * 3 ** 2").unwrap();
+        let lexed = lexer().parse("10 + (30 - 5) * 3 ** 2").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(22..23, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(
             parsed.0,
@@ -397,7 +276,10 @@ mod tests {
 
     #[test]
     fn parse_array_index() {
-        let parsed = parse().parse("[1, 2, 3, 4][3]").unwrap();
+        let lexed = lexer().parse("[1, 2, 3, 4][3]").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(15..16, lexed.into_iter()))
+            .unwrap();
 
         assert_eq!(
             parsed.0,
@@ -420,7 +302,14 @@ mod tests {
 		} else {
 			nice;
 		}";
-        let (parsed, errs) = parse().parse_recovery_verbose(input);
+        let (lexed, errs) = lexer().parse_recovery(input);
+
+        for err in errs {
+            err.display("[input]", input, 0)
+        }
+
+        let (parsed, errs) =
+            parse().parse_recovery(Stream::from_iter(44..45, lexed.unwrap().into_iter()));
 
         for err in errs {
             err.display("[input]", input, 0)

@@ -2,7 +2,7 @@ use ariadne::{ColorGenerator, Fmt, Label, Report, Source};
 use chumsky::prelude::Simple;
 
 use crate::{
-    ast::InfixOp,
+    ast::{InfixOp, Token},
     interpreter::{SpannedValue, ValueType},
 };
 
@@ -43,6 +43,27 @@ pub trait ChumskyAriadne {
 }
 
 impl ChumskyAriadne for Simple<char> {
+    fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
+        Report::build(ariadne::ReportKind::Error, source, offset)
+            .with_code(1)
+            .with_message("SyntaxError: Unexpected token")
+            .with_label(
+                Label::new((source_file, self.span()))
+                    .with_message(format!("{}", self))
+                    .with_color(ariadne::Color::Green),
+            )
+            .with_note(if let Some(e) = self.label() {
+                format!("Label is `{}`", e)
+            } else {
+                "No label".to_owned()
+            })
+            .finish()
+            .eprint((source_file, Source::from(source)))
+            .unwrap();
+    }
+}
+
+impl ChumskyAriadne for Simple<Token> {
     fn display<'a>(&self, source_file: &'a str, source: &'a str, offset: usize) {
         Report::build(ariadne::ReportKind::Error, source, offset)
             .with_code(1)
