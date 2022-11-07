@@ -29,17 +29,16 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
 
             let assign = ident
                 .then_ignore(just(Token::Op("=".to_owned())))
-                .then(raw_expr.clone())
-                .then_ignore(just(Token::Ctrl(';')))
                 .then(expr.clone())
-                .map(|((name, val), then)| Expr::Assign {
+                .then_ignore(just(Token::Ctrl(';')))
+                .map(|(name, val)| Expr::Assign {
                     name,
                     val: Box::new(val),
                 });
 
             let atom = val
                 .or(ident.map(Expr::Ident))
-                .or(assign)
+                .or(assign.clone())
                 .or(array)
                 .map_with_span(Spanned)
                 .or(expr
@@ -74,7 +73,7 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
                         .repeated()
                         .labelled("index"),
                 )
-                .foldl(|lhs, rhs| {
+                .foldl(|lhs, rhs: Spanned| {
                     let span = lhs.1.start()..rhs.1.end();
 
                     Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), span)
@@ -126,11 +125,34 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
             sum
         });
 
-		let conditional = recursive(|cond| {
-			let block = expr.clone().repeated().delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-		});
+        let conditional = recursive(|cond| {
+            let block = expr
+                .clone()
+                .repeated()
+                .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+                .map(Expr::Block)
+                .map_with_span(Spanned);
 
-        raw_expr
+            just(Token::If)
+                .ignore_then(expr.clone())
+                .then(block.clone())
+                .then_ignore(just(Token::Else))
+                .then(block.or(cond))
+                .map(|((condition, inner), other)| {
+                    let span = condition.1.start..other.1.end;
+
+                    Spanned(
+                        Expr::Conditional {
+                            condition: Box::new(condition),
+                            inner: Box::new(inner),
+                            other: Box::new(other),
+                        },
+                        span,
+                    )
+                })
+        });
+
+        conditional.or(raw_expr)
     })
     .then_ignore(end())
 }
@@ -281,6 +303,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_assign() {
+        let lexed = lexer().parse("nice = 12").unwrap();
+        let parsed = parse()
+            .parse(Stream::from_iter(9..10, lexed.into_iter()))
+            .unwrap();
+
+        assert_eq!(
+            parsed,
+            Expr::Assign {
+                name: "nice".to_owned(),
+                val: Box::new(Spanned::from(12.0))
+            }
+        )
+    }
+
+    #[test]
     fn parse_array_index() {
         let lexed = lexer().parse("[1, 2, 3, 4][3]").unwrap();
         let parsed = parse()
@@ -304,10 +342,11 @@ mod tests {
     #[test]
     fn parse_conditional() {
         let input = "if cool {
-			36;
+			36
 		} else {
-			nice;
+			nice
 		}";
+
         let (lexed, errs) = lexer().parse_recovery(input);
 
         for err in errs {
@@ -331,5 +370,59 @@ mod tests {
                 )])))
             }
         )
+    }
+
+    #[test]
+    fn parse_assign_in_cond() {
+        let input = r#"if cool {
+			bees = "yeah";
+			36
+		else {
+			nice
+		}"#;
+
+        let (lexed, errs) = lexer().parse_recovery(input);
+
+        for err in errs {
+            err.display("[input]", input, 0)
+        }
+
+        let (parsed, errs) =
+            parse().parse_recovery(Stream::from_iter(54..55, lexed.unwrap().into_iter()));
+
+        for err in errs {
+            err.display("[input]", input, 0)
+        }
+
+        assert_eq!(
+            parsed.unwrap(),
+            Expr::Conditional {
+                condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                inner: Box::new(Spanned::from(Expr::Block(vec![
+                    Spanned::from(Expr::Assign {
+                        name: "bees".to_owned(),
+                        val: Box::new(Spanned::from("yeah"))
+                    }),
+                    Spanned::from(36.0)
+                ],),)),
+                other: Box::new(Spanned::from(Expr::Ident("nice".to_owned())))
+            }
+        )
+    }
+
+    #[test]
+    fn parse_big() {
+        let input = r#"beef = "nice";
+		cool = 34;
+		
+		epic = if beef != "epic" {
+			beef = "epic";
+			398
+		} else if cool * 2 < 100 {
+			beef = "not so cool";
+			cool * 2
+		} else {
+			100
+		}"#;
     }
 }
