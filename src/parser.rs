@@ -122,7 +122,13 @@ pub fn parse() -> impl Parser<Token, Spanned, Error = Simple<Token>> + Clone {
 
                     Spanned(Expr::InfixOp(Box::new(lhs), op, Box::new(rhs)), span)
                 });
+
+            sum
         });
+
+		let conditional = recursive(|cond| {
+			let block = expr.clone().repeated().delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+		});
 
         raw_expr
     })
