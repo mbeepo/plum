@@ -128,45 +128,25 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
 
             let op = just(Token::Op("==".to_owned()))
                 .labelled("equals")
-                .to(InfixOp::Equals);
-            let equals = or
+                .to(InfixOp::Equals)
+                .or(just(Token::Op("<=".to_owned()))
+                    .labelled("less than or equal")
+                    .to(InfixOp::Lte))
+                .or(just(Token::Op(">=".to_owned()))
+                    .labelled("greater than or equal")
+                    .to(InfixOp::Gte))
+                .or(just(Token::Op("<".to_owned()))
+                    .labelled("less than")
+                    .to(InfixOp::Lt))
+                .or(just(Token::Op(">".to_owned()))
+                    .labelled("greater than")
+                    .to(InfixOp::Gt));
+            let compare = or
                 .clone()
                 .then(op.then(or).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            let op = just(Token::Op("<".to_owned()))
-                .labelled("less than")
-                .to(InfixOp::Lt);
-            let lt = or
-                .clone()
-                .then(op.then(equals).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
-            let op = just(Token::Op(">".to_owned()))
-                .labelled("greater than")
-                .to(InfixOp::Gt);
-            let gt = lt
-                .clone()
-                .then(op.then(lt).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
-            let lte = just(Token::Op("<=".to_owned()))
-                .labelled("less than or equal")
-                .to(InfixOp::Lte);
-            let lte = gt
-                .clone()
-                .then(op.then(gt).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
-            let op = just(Token::Op(">=".to_owned()))
-                .labelled("greater than or equal")
-                .to(InfixOp::Gte);
-            let gte = lte
-                .clone()
-                .then(op.then(lte).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
-            gte
+            compare
         });
 
         let conditional = recursive(|cond| {
@@ -466,6 +446,20 @@ mod tests {
 
     #[test]
     fn parse_equals() {
+        let parsed = parse("10 == 12");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(10.0)),
+                InfixOp::Equals,
+                Box::new(Spanned::from(12.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_lt() {
         let parsed = parse("10 < 12");
 
         assert_eq!(
@@ -473,6 +467,48 @@ mod tests {
             Expr::InfixOp(
                 Box::new(Spanned::from(10.0)),
                 InfixOp::Lt,
+                Box::new(Spanned::from(12.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_gt() {
+        let parsed = parse("10 > 12");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(10.0)),
+                InfixOp::Gt,
+                Box::new(Spanned::from(12.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_lte() {
+        let parsed = parse("10 <= 12");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(10.0)),
+                InfixOp::Lte,
+                Box::new(Spanned::from(12.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_gte() {
+        let parsed = parse("10 >= 12");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(10.0)),
+                InfixOp::Gte,
                 Box::new(Spanned::from(12.0))
             )
         )

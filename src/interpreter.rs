@@ -357,7 +357,7 @@ mod tests {
 
     #[test]
     fn interpret_and_true() {
-        let parsed = parse("true && true");
+        let parsed = parse("true and true");
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, vec![Value::Bool(true)])
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn interpret_and_false() {
-        let parsed = parse("true && false");
+        let parsed = parse("true and false");
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, vec![Value::Bool(false)])
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn interpret_or_true() {
-        let parsed = parse("true || false");
+        let parsed = parse("true or false");
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, vec![Value::Bool(true)])
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn interpret_or_false() {
-        let parsed = parse("false || false");
+        let parsed = parse("false or false");
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, vec![Value::Bool(false)])
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn interpret_chain_and_or() {
-        let parsed = parse("true && false || true && true");
+        let parsed = parse("true and false or true and true");
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, vec![Value::Bool(true)])
