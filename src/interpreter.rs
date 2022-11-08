@@ -12,6 +12,7 @@ pub enum Value {
     Bool(bool),
     Array(Vec<SpannedValue>),
     Error,
+    Assign(String, Box<Value>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -22,6 +23,7 @@ pub enum ValueType {
     Bool,
     Array,
     Error,
+    Assign,
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +79,7 @@ impl Display for ValueType {
             ValueType::Bool => "Bool",
             ValueType::Array => "Array",
             ValueType::Error => "[ERROR]",
+            ValueType::Assign => "Assign",
         };
 
         write!(f, "{}", out)
@@ -91,6 +94,7 @@ impl Value {
             Value::Bool(_) => ValueType::Bool,
             Value::Array(_) => ValueType::Array,
             Value::Error => ValueType::Error,
+            Value::Assign(_, _) => ValueType::Assign,
         }
     }
 }

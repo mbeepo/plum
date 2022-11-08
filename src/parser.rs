@@ -132,10 +132,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
         let conditional = recursive(|cond| {
             let block = expr
                 .clone()
-                .repeated()
-                .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-                .map(Expr::Block)
-                .map_with_span(Spanned);
+                .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')));
 
             just(Token::If)
                 .ignore_then(expr.clone())
@@ -339,39 +336,8 @@ mod tests {
             parsed[0],
             Expr::Conditional {
                 condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
-                inner: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(36.0)]))),
-                other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(
-                    Expr::Ident("nice".to_owned())
-                )])))
-            }
-        )
-    }
-
-    #[test]
-    fn parse_cond_assign() {
-        let parsed = parse(
-            r#"if cool {
-			bees = "yeah";
-			36
-		} else {
-			nice
-		}"#,
-        );
-
-        assert_eq!(
-            parsed[0],
-            Expr::Conditional {
-                condition: Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
-                inner: Box::new(Spanned::from(Expr::Block(vec![
-                    Spanned::from(Expr::Assign {
-                        name: "bees".to_owned(),
-                        value: Box::new(Spanned::from("yeah"))
-                    }),
-                    Spanned::from(36.0)
-                ],),)),
-                other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(
-                    Expr::Ident("nice".to_owned())
-                )])))
+                inner: Box::new(Spanned::from(36.0)),
+                other: Box::new(Spanned::from(Expr::Ident("nice".to_owned())))
             }
         )
     }
@@ -451,8 +417,8 @@ mod tests {
                 name: "cool".to_owned(),
                 value: Box::new(Spanned::from(Expr::Conditional {
                     condition: Box::new(Spanned::from(Expr::Ident("nice".to_owned()))),
-                    inner: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(30.0)]))),
-                    other: Box::new(Spanned::from(Expr::Block(vec![Spanned::from(10.0)])))
+                    inner: Box::new(Spanned::from(30.0)),
+                    other: Box::new(Spanned::from(10.0))
                 }))
             }
         )

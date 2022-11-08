@@ -136,7 +136,6 @@ pub enum Expr {
     },
     Access(Box<Spanned>, Box<Spanned>),
     Call(Box<Spanned>, Vec<Spanned>),
-    Block(Vec<Spanned>),
     Assign {
         name: String,
         value: Box<Spanned>,
