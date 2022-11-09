@@ -9,13 +9,16 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub enum TypeErrorCtx {
     // can't perform <op> on <lhs>
+    // for when <lhs> is an invalid type for <op> in any use case
     InfixOpLhs { op: InfixOp },
     // can only perform <op> on <lhs> with <expected>
+    // for when <rhs> is an invalid type for <op> with <lhs>
     InfixOpRhs { lhs: ValueType, op: InfixOp },
     Not,
     StringMul,
     Index,
     IndexOf,
+    AssignToAssign,
 }
 
 #[derive(Clone, Debug)]

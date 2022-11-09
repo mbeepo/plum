@@ -2,7 +2,7 @@ use std::{fmt::Display, ops::Range};
 
 use crate::{
     ast::{Expr, InfixOp, Literal, Spanned},
-    errors::Error,
+    errors::{Error, TypeErrorCtx},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -133,6 +133,39 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             }
             _ => Ok(SpannedValue(Value::from(literal.clone()), span.clone())),
         },
+        Spanned(Expr::Assign { name, value }, span) => {
+            let interpreted = interpret(value);
+
+            match interpreted {
+                Ok(spanned) => {
+                    if let SpannedValue(Value::Assign(other_name, other_value), other_span) =
+                        spanned
+                    {
+                        let err = Error::TypeError {
+                            expected: vec![
+                                ValueType::Num,
+                                ValueType::String,
+                                ValueType::Bool,
+                                ValueType::Array,
+                            ],
+                            got: spanned,
+                            context: TypeErrorCtx::AssignToAssign,
+                        };
+
+                        errors.push(err);
+
+                        Err(errors)
+                    } else {
+                        Ok(SpannedValue(Value::Assign(name, interpreted), span.clone()))
+                    }
+                }
+                Err(error) => {
+                    errors.extend(error);
+
+                    Err(errors)
+                }
+            }
+        }
         Spanned(Expr::InfixOp(lhs, op, rhs), span) => {
             let lhs = interpret(lhs);
             let lhs = match lhs {
