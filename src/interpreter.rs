@@ -138,9 +138,8 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
 
             match interpreted {
                 Ok(spanned) => {
-                    if let SpannedValue(Value::Assign(other_name, other_value), other_span) =
-                        spanned
-                    {
+                    // disallow assigning to assignments
+                    if let SpannedValue(Value::Assign(_, _), _) = spanned.clone() {
                         let err = Error::TypeError {
                             expected: vec![
                                 ValueType::Num,
@@ -156,7 +155,10 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
 
                         Err(errors)
                     } else {
-                        Ok(SpannedValue(Value::Assign(name, interpreted), span.clone()))
+                        Ok(SpannedValue(
+                            Value::Assign(name.clone(), Box::new(spanned.0)),
+                            span.clone(),
+                        ))
                     }
                 }
                 Err(error) => {
@@ -415,5 +417,19 @@ mod tests {
         let interpreted = interpret(parsed).unwrap();
 
         assert_eq!(interpreted, Value::Bool(true))
+    }
+
+    #[test]
+    fn interpret_assign() {
+        let parsed = &parse("nice = 'cool';")[0];
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(
+            interpreted,
+            Value::Assign(
+                "nice".to_owned(),
+                Box::new(Value::String("cool".to_owned()))
+            )
+        )
     }
 }

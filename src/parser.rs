@@ -111,6 +111,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("and".to_owned()))
+                .or(just(Token::Op("&&".to_owned())))
                 .labelled("and")
                 .to(InfixOp::And);
             let and = sum
@@ -119,6 +120,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("or".to_owned()))
+                .or(just(Token::Op("||".to_owned())))
                 .labelled("or")
                 .to(InfixOp::Or);
             let or = and
@@ -386,6 +388,24 @@ mod tests {
                 Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
                 InfixOp::Or,
                 Box::new(Spanned::from(Expr::Ident("good".to_owned())))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_mixed_and() {
+        let parsed = parse("cool and good && nice");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(Expr::InfixOp(
+                    Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
+                    InfixOp::And,
+                    Box::new(Spanned::from(Expr::Ident("good".to_owned())))
+                ))),
+                InfixOp::And,
+                Box::new(Spanned::from(Expr::Ident("nice".to_owned()))),
             )
         )
     }
