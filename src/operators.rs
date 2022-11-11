@@ -1,7 +1,7 @@
 use crate::{
     ast::InfixOp,
     error::{Error, TypeErrorCtx},
-    interpreter::{SpannedValue, Value, ValueType},
+    eval::{SpannedValue, Value, ValueType},
 };
 
 // da big SpannedValue operation set
@@ -382,8 +382,8 @@ impl SpannedValue {
                                 Err(Error::IndexError {
                                     index: e,
                                     len,
-                                    lhs: self.1,
-                                    rhs: idx.1,
+                                    lspan: self.1,
+                                    rspan: idx.1,
                                 })
                             }
                         }
@@ -396,8 +396,8 @@ impl SpannedValue {
                                 Err(Error::IndexError {
                                     index: e,
                                     len,
-                                    lhs: self.1,
-                                    rhs: idx.1,
+                                    lspan: self.1,
+                                    rspan: idx.1,
                                 })
                             }
                         }

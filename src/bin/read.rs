@@ -1,11 +1,19 @@
 use std::env;
 
-use plum::eval::eval;
+use plum::{error::ChumskyAriadne, interpreter::interpret};
 
 fn main() {
     let path = &env::args().collect::<Vec<String>>()[1];
     let file = std::fs::read(path).unwrap();
-    let evaluated = eval(String::from_utf8(file).unwrap());
+    let source = String::from_utf8(file).unwrap();
+    let evaluated = interpret(&source);
 
-    println!("{:#?}", evaluated);
+    match evaluated {
+        Err(errs) => {
+            for err in errs {
+                err.display(path, &source, 0);
+            }
+        }
+        Ok(out) => println!("{:#?}", out),
+    }
 }

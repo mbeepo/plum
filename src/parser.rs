@@ -28,11 +28,17 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .map(Expr::Literal);
 
             let assign = ident
-                .then_ignore(just(Token::Op("=".to_owned())))
-                .then(expr.clone())
+                .clone()
+                .chain(
+                    just(Token::Op("=".to_owned()))
+                        .ignore_then(ident)
+                        .then_ignore(just(Token::Op("=".to_owned())))
+                        .repeated(),
+                )
+                .then(just(Token::Op("=".to_owned())).ignore_then(expr.clone()))
                 .then_ignore(just(Token::Ctrl(';')))
-                .map(|(name, val)| Expr::Assign {
-                    name,
+                .map(|(names, val)| Expr::Assign {
+                    names,
                     value: Box::new(val),
                 });
 
@@ -328,7 +334,7 @@ mod tests {
         assert_eq!(
             parsed[0],
             Expr::Assign {
-                name: "nice".to_owned(),
+                names: vec!["nice".to_owned()],
                 value: Box::new(Spanned::from(12.0))
             }
         )
@@ -430,11 +436,11 @@ mod tests {
             parsed,
             vec![
                 Expr::Assign {
-                    name: "cool".to_owned(),
+                    names: vec!["cool".to_owned()],
                     value: Box::new(Spanned::from(3.0))
                 },
                 Expr::Assign {
-                    name: "nice".to_owned(),
+                    names: vec!["nice".to_owned()],
                     value: Box::new(Spanned::from(Expr::InfixOp(
                         Box::new(Spanned::from(Expr::Ident("cool".to_owned()))),
                         InfixOp::Add,
@@ -442,7 +448,7 @@ mod tests {
                     )))
                 },
                 Expr::Assign {
-                    name: "sick".to_owned(),
+                    names: vec!["sick".to_owned()],
                     value: Box::new(Spanned::from(false)),
                 }
             ]
@@ -462,7 +468,7 @@ mod tests {
         assert_eq!(
             parsed[0],
             Expr::Assign {
-                name: "cool".to_owned(),
+                names: vec!["cool".to_owned()],
                 value: Box::new(Spanned::from(Expr::Conditional {
                     condition: Box::new(Spanned::from(Expr::Ident("nice".to_owned()))),
                     inner: Box::new(Spanned::from(30.0)),
@@ -559,6 +565,19 @@ mod tests {
                     Spanned::from(14.0)
                 ]))
             )
+        )
+    }
+
+    #[test]
+    fn parse_assign_chain() {
+        let parsed = parse("these = are = all = 12;");
+
+        assert_eq!(
+            parsed[0],
+            Expr::Assign {
+                names: vec!["these".to_owned(), "are".to_owned(), "all".to_owned()],
+                value: Box::new(Spanned::from(12.0))
+            }
         )
     }
 }

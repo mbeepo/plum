@@ -143,7 +143,7 @@ pub enum Expr {
     Access(Box<Spanned>, Box<Spanned>),
     Call(Box<Spanned>, Vec<Spanned>),
     Assign {
-        name: String,
+        names: Vec<String>,
         value: Box<Spanned>,
     },
     Error,

@@ -3,7 +3,7 @@ use chumsky::prelude::Simple;
 
 use crate::{
     ast::{InfixOp, Span, Token},
-    interpreter::{SpannedValue, ValueType},
+    eval::{SpannedValue, ValueType},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -32,14 +32,19 @@ pub enum Error {
     IndexError {
         index: usize,
         len: usize,
-        lhs: Span,
-        rhs: Span,
+        lspan: Span,
+        rspan: Span,
     },
     SyntaxError(Simple<char>),
     ParsingError(Simple<Token>),
     ReferenceError {
         name: String,
         span: Span,
+    },
+    ReassignError {
+        name: String,
+        old_span: Span,
+        new_span: Span,
     },
 }
 
@@ -148,8 +153,8 @@ impl ChumskyAriadne for Error {
             Self::IndexError {
                 index,
                 len,
-                lhs,
-                rhs,
+                lspan: lhs,
+                rspan: rhs,
             } => {
                 let a = colors.next();
                 let b = colors.next();
@@ -163,7 +168,7 @@ impl ChumskyAriadne for Error {
                         max_idx.fg(c)
                     )
                 } else {
-                    "Index must with within the bounds of the accessed object".to_owned()
+                    "Index must fit within the bounds of the accessed sequence".to_owned()
                 };
 
                 Report::build(ariadne::ReportKind::Error, source, offset)
@@ -183,6 +188,36 @@ impl ChumskyAriadne for Error {
                     .finish()
                     .eprint((source_file, Source::from(source)))
                     .unwrap();
+            }
+            Self::ReassignError {
+                name,
+                old_span,
+                new_span,
+            } => {
+                let a = colors.next();
+                let b = colors.next();
+
+                Report::build(ariadne::ReportKind::Error, source, offset)
+                    .with_code(4)
+                    .with_message("Attempt to reassign variable")
+                    .with_label(
+                        Label::new((source_file, old_span.clone()))
+                            .with_message(format!(
+                                "`{}` was first assigned {}",
+                                name.clone().fg(a),
+                                "here".fg(a)
+                            ))
+                            .with_color(a),
+                    )
+                    .with_label(
+                        Label::new((source_file, new_span.clone()))
+                            .with_message(format!("It was then reassigned {}", "here".fg(b)))
+                            .with_color(b),
+                    )
+                    .with_note("Variables may only be assigned once")
+                    .finish()
+                    .eprint((source_file, Source::from(source)))
+                    .unwrap()
             }
             _ => todo!(),
         }
