@@ -1,5 +1,0 @@
-nice = "cool";
-cool = 12;
-epic = nice * cool;
-
-wicked = epic[cool];
