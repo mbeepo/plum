@@ -35,7 +35,8 @@ pub enum Error {
         lhs: Span,
         rhs: Span,
     },
-    SyntaxError {},
+    SyntaxError(Simple<char>),
+    ParsingError(Simple<Token>),
     ReferenceError {
         name: String,
         span: Span,

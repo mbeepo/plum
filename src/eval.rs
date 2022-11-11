@@ -1,105 +1,45 @@
 use std::collections::HashMap;
 
-use chumsky::Parser;
+use chumsky::{Parser, Stream};
 
 use crate::{
-    errors::ChumskyAriadne,
-    interpreter::{interpret, Value},
-    parser::parse,
+    error::Error,
+    interpreter::{interpret, SpannedValue, Value},
+    lexer, parser,
 };
 
-fn addr_of(s: &str) -> usize {
-    s.as_ptr() as usize
-}
+pub fn eval(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+    let input = input.into();
+    let len = input.len();
 
-fn split_with_offset<'a>(s: &'a str, on: &'a str) -> impl Iterator<Item = (usize, &'a str)> {
-    s.split(on).map(move |sub| (addr_of(sub) - addr_of(s), sub))
-}
+    let (lexed, errs) = lexer::lexer().parse_recovery(input);
 
-pub fn eval(source: &str, split_on: &str) -> HashMap<String, Value> {
-    let mut output: HashMap<String, Value> = HashMap::new();
-    let input = split_with_offset(source, split_on);
+    if errs.len() > 0 {
+        return Err(errs.iter().map(|e| Error::SyntaxError(e.clone())).collect());
+    }
 
-    for (offset, part) in input {
-        let mut parts = split_with_offset(part, "=");
+    let (parsed, errs) =
+        parser::parse().parse_recovery(Stream::from_iter(len..len + 1, lexed.unwrap().into_iter()));
 
-        let (_ident_offset, ident) = parts.next().unwrap();
-        let (expr_offset, expr) = parts.next().unwrap();
+    if errs.len() > 0 {
+        return Err(errs
+            .iter()
+            .map(|e| Error::ParsingError(e.clone()))
+            .collect());
+    }
 
-        let ident = ident.trim();
-        let expr = expr.trim();
+    let mut vars: HashMap<String, Value> = HashMap::new();
 
-        let parsed = parse().parse(expr);
-        let parsed = match parsed {
-            Err(e) => {
-                for err in e {
-                    eprintln!("{}", err);
-                }
+    for expr in parsed.unwrap() {
+        let interpreted = interpret(expr, vars.clone())?;
 
-                continue;
+        match interpreted {
+            SpannedValue(Value::Assign(name, value), _) => {
+                vars.insert(name, *value);
             }
-            Ok(e) => e,
-        };
-
-        let interpreted = interpret(parsed);
-        let interpreted = match interpreted {
-            Err(e) => {
-                for err in e {
-                    err.display("[stdin]", source, expr_offset + offset);
-                }
-
-                continue;
-            }
-            Ok(e) => e.0,
-        };
-
-        output.insert(ident.to_owned(), interpreted);
+            _ => {}
+        }
     }
 
-    output
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    use crate::interpreter::Value;
-
-    use super::eval;
-
-    #[test]
-    fn assign_one() {
-        let out = eval("e = 45", "#split");
-
-        let expected = [("e".to_owned(), Value::Num(45.0))];
-        let expected: HashMap<String, Value> = expected.into_iter().collect();
-
-        assert_eq!(out, expected)
-    }
-
-    #[test]
-    fn assign_multiple() {
-        let out = eval(
-            r#"
-			nice = 23
-			#split
-			cool = "epic"
-			#split
-			gnar = "sickening"
-			#split
-			wicked = true
-		"#,
-            "#split",
-        );
-
-        let expected = [
-            ("nice".to_owned(), Value::Num(23.0)),
-            ("cool".to_owned(), Value::String("epic".to_owned())),
-            ("gnar".to_owned(), Value::String("sickening".to_owned())),
-            ("wicked".to_owned(), Value::Bool(true)),
-        ];
-        let expected: HashMap<String, Value> = expected.into_iter().collect();
-
-        assert_eq!(out, expected)
-    }
+    Ok(vars)
 }

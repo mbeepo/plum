@@ -1,0 +1,6 @@
+base = 10;
+exp = 6;
+
+raised = base ** exp;
+
+out = raised == 1000000;
