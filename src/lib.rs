@@ -1,5 +1,5 @@
 mod ast;
-pub mod errors;
+pub mod error;
 // pub mod eval;
 pub mod interpreter;
 pub mod lexer;

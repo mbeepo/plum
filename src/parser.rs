@@ -130,13 +130,21 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .then(op.then(sum).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
+            let op = just(Token::Op("in".to_owned()))
+                .labelled("in")
+                .to(InfixOp::In);
+            let contains = compare
+                .clone()
+                .then(op.then(compare).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
             let op = just(Token::Op("and".to_owned()))
                 .or(just(Token::Op("&&".to_owned())))
                 .labelled("and")
                 .to(InfixOp::And);
-            let and = compare
+            let and = contains
                 .clone()
-                .then(op.then(compare).repeated())
+                .then(op.then(contains).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("or".to_owned()))
@@ -530,6 +538,26 @@ mod tests {
                 Box::new(Spanned::from(10.0)),
                 InfixOp::Gte,
                 Box::new(Spanned::from(12.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_contains() {
+        let parsed = parse("12 in [10, 11, 12, 13, 14]");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(12.0)),
+                InfixOp::In,
+                Box::new(Spanned::from(vec![
+                    Spanned::from(10.0),
+                    Spanned::from(11.0),
+                    Spanned::from(12.0),
+                    Spanned::from(13.0),
+                    Spanned::from(14.0)
+                ]))
             )
         )
     }

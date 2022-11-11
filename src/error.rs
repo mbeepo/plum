@@ -2,7 +2,7 @@ use ariadne::{ColorGenerator, Fmt, Label, Report, Source};
 use chumsky::prelude::Simple;
 
 use crate::{
-    ast::{InfixOp, Token},
+    ast::{InfixOp, Span, Token},
     interpreter::{SpannedValue, ValueType},
 };
 
@@ -19,6 +19,7 @@ pub enum TypeErrorCtx {
     Index,
     IndexOf,
     AssignToAssign,
+    Contains { rhs: ValueType },
 }
 
 #[derive(Clone, Debug)]
@@ -31,8 +32,14 @@ pub enum Error {
     IndexError {
         index: usize,
         len: usize,
+        lhs: Span,
+        rhs: Span,
     },
     SyntaxError {},
+    ReferenceError {
+        name: String,
+        span: Span,
+    },
 }
 
 impl From<Error> for Vec<Error> {
@@ -122,7 +129,7 @@ impl ChumskyAriadne for Error {
                             .with_code(2)
                             .with_message("Incompatible types")
                             .with_label(
-                                Label::new((source, got.clone().1))
+                                Label::new((source_file, got.clone().1))
                                     .with_message(format!(
                                         "This is of type {}",
                                         got.0.get_type().to_string().fg(a)
@@ -136,6 +143,45 @@ impl ChumskyAriadne for Error {
                     }
                     _ => todo!(),
                 }
+            }
+            Self::IndexError {
+                index,
+                len,
+                lhs,
+                rhs,
+            } => {
+                let a = colors.next();
+                let b = colors.next();
+
+                let note = if len == index {
+                    let c = colors.next();
+                    let max_idx = index - 1;
+
+                    format!(
+                        "Arrays are zero-indexed, the index of the last element is {}",
+                        max_idx.fg(c)
+                    )
+                } else {
+                    "Index must with within the bounds of the accessed object".to_owned()
+                };
+
+                Report::build(ariadne::ReportKind::Error, source, offset)
+                    .with_code(3)
+                    .with_message("Index out of bounds")
+                    .with_label(
+                        Label::new((source_file, lhs.clone()))
+                            .with_message(format!("This is of length {}", len.fg(a)))
+                            .with_color(a),
+                    )
+                    .with_label(
+                        Label::new((source_file, rhs.clone()))
+                            .with_message(format!("This is {}", index.fg(b)))
+                            .with_color(b),
+                    )
+                    .with_note(note)
+                    .finish()
+                    .eprint((source_file, Source::from(source)))
+                    .unwrap();
             }
             _ => todo!(),
         }

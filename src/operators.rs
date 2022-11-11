@@ -1,6 +1,6 @@
 use crate::{
     ast::InfixOp,
-    errors::{Error, TypeErrorCtx},
+    error::{Error, TypeErrorCtx},
     interpreter::{SpannedValue, Value, ValueType},
 };
 
@@ -324,14 +324,14 @@ impl SpannedValue {
     }
 
     pub fn contains(self, other: Self) -> Result<Value, Error> {
-        let yes = match self.0 {
-            Value::Array(lhs) => lhs.contains(&SpannedValue(other.0, 0..1)),
-            Value::String(lhs) => match other.0 {
+        let yes = match other.0 {
+            Value::Array(lhs) => lhs.contains(&SpannedValue(self.0, 0..1)),
+            Value::String(lhs) => match self.0 {
                 Value::String(rhs) => lhs.contains(&rhs),
                 _ => {
                     return Err(Error::TypeError {
                         expected: ValueType::String.into(),
-                        got: other,
+                        got: self,
                         context: TypeErrorCtx::InfixOpRhs {
                             lhs: ValueType::String,
                             op: (InfixOp::In),
@@ -379,7 +379,12 @@ impl SpannedValue {
                             if len > e {
                                 Ok(f[e].clone().0)
                             } else {
-                                Err(Error::IndexError { index: e, len })
+                                Err(Error::IndexError {
+                                    index: e,
+                                    len,
+                                    lhs: self.1,
+                                    rhs: idx.1,
+                                })
                             }
                         }
                         Value::String(f) => {
@@ -388,7 +393,12 @@ impl SpannedValue {
                             if len > e {
                                 Ok(Value::String(f.chars().nth(e).unwrap().to_string()))
                             } else {
-                                Err(Error::IndexError { index: e, len })
+                                Err(Error::IndexError {
+                                    index: e,
+                                    len,
+                                    lhs: self.1,
+                                    rhs: idx.1,
+                                })
                             }
                         }
                         _ => Err(Error::TypeError {

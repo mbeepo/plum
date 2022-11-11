@@ -1,8 +1,8 @@
-use std::{fmt::Display, ops::Range};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use crate::{
     ast::{Expr, InfixOp, Literal, Spanned},
-    errors::{Error, TypeErrorCtx},
+    error::Error,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -93,7 +93,10 @@ impl Value {
     }
 }
 
-pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>> {
+pub fn interpret<T: AsRef<Spanned>>(
+    input: T,
+    vars: HashMap<String, Value>,
+) -> Result<SpannedValue, Vec<Error>> {
     let input = input.as_ref();
     let mut errors: Vec<Error> = Vec::new();
 
@@ -105,7 +108,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
                 let new = e
                     .iter()
                     .map(|f| {
-                        let interpreted = interpret(f.clone());
+                        let interpreted = interpret(f.clone(), vars.clone());
 
                         match interpreted {
                             Ok(e) => e,
@@ -128,7 +131,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             _ => Ok(SpannedValue(Value::from(literal.clone()), span.clone())),
         },
         Spanned(Expr::Assign { name, value }, span) => {
-            let interpreted = interpret(value);
+            let interpreted = interpret(value, vars);
 
             match interpreted {
                 Ok(spanned) => Ok(SpannedValue(
@@ -143,7 +146,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             }
         }
         Spanned(Expr::InfixOp(lhs, op, rhs), span) => {
-            let lhs = interpret(lhs);
+            let lhs = interpret(lhs, vars.clone());
             let lhs = match lhs {
                 Err(e) => {
                     errors.extend(e);
@@ -153,7 +156,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
                 Ok(e) => e.clone(),
             };
 
-            let rhs = interpret(rhs);
+            let rhs = interpret(rhs, vars);
             let rhs = match rhs {
                 Err(e) => {
                     errors.extend(e);
@@ -195,7 +198,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             }
         }
         Spanned(Expr::Not(rhs), span) => {
-            let rhs = interpret(rhs);
+            let rhs = interpret(rhs, vars);
             let rhs = match rhs {
                 Err(e) => {
                     errors.extend(e);
@@ -217,7 +220,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             }
         }
         Spanned(Expr::Index(lhs, rhs), span) => {
-            let lhs = interpret(lhs);
+            let lhs = interpret(lhs, vars.clone());
             let lhs = match lhs {
                 Err(e) => {
                     errors.extend(e);
@@ -227,7 +230,7 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
                 Ok(e) => e.clone(),
             };
 
-            let rhs = interpret(rhs);
+            let rhs = interpret(rhs, vars);
             let rhs = match rhs {
                 Err(e) => {
                     errors.extend(e);
@@ -252,17 +255,40 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
                 Ok(e) => Ok(SpannedValue(e, span.clone())),
             }
         }
+        Spanned(Expr::Ident(name), span) => {
+            let out = vars.get(name);
+
+            match out {
+                Some(out) => Ok(SpannedValue(out.clone(), span.clone())),
+                None => {
+                    let err = Error::ReferenceError {
+                        name: name.clone(),
+                        span: span.clone(),
+                    };
+                    errors.push(err);
+
+                    Err(errors)
+                }
+            }
+        }
         _ => todo!(),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use chumsky::{Parser, Stream};
 
-    use crate::{ast::Spanned, lexer::lexer, parser};
+    use crate::{
+        ast::Spanned,
+        error::{ChumskyAriadne, Error},
+        lexer::lexer,
+        parser,
+    };
 
-    use super::{interpret, Value};
+    use super::{SpannedValue, Value};
 
     fn parse<'a>(input: &'a str) -> Vec<Spanned> {
         let len = input.len();
@@ -271,6 +297,10 @@ mod tests {
         parser::parse()
             .parse(Stream::from_iter(len..len + 1, lexed.into_iter()))
             .unwrap()
+    }
+
+    fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>> {
+        super::interpret(input, HashMap::new())
     }
 
     #[test]
@@ -429,5 +459,53 @@ mod tests {
         let interpreted = interpret(parsed);
 
         assert!(interpreted.is_err())
+    }
+
+    #[test]
+    fn interpret_contains() {
+        let parsed = &parse("12 in [10, 11, 12, 13, 14]")[0];
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(interpreted, Value::Bool(true))
+    }
+
+    #[test]
+    fn interpret_index_array_fail() {
+        let parsed = &parse("[1, 2, 3][3]")[0];
+        let interpreted = interpret(parsed);
+
+        assert!(interpreted.is_err())
+    }
+
+    #[test]
+    fn interpret_index_string_fail() {
+        let parsed = &parse(r#""nice"[10]"#)[0];
+        let interpreted = interpret(parsed);
+
+        assert!(interpreted.is_err())
+    }
+
+    #[test]
+    fn interpret_assigned() {
+        let parsed = parse(r#"cool = 23; nice = cool * 3;"#);
+        let mut vars: HashMap<String, Value> = HashMap::new();
+
+        let interpreted1 = interpret(&parsed[0]).unwrap();
+
+        match interpreted1 {
+            SpannedValue(Value::Assign(name, value), _) => {
+                vars.insert(name, *value);
+            }
+            _ => {
+                assert!(false);
+            }
+        }
+
+        let interpreted2 = super::interpret(&parsed[1], vars).unwrap();
+
+        assert_eq!(
+            interpreted2,
+            Value::Assign("nice".to_owned(), Box::new(Value::Num(69.0)))
+        )
     }
 }
