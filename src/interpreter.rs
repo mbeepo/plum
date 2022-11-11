@@ -64,12 +64,6 @@ impl From<Literal> for Value {
     }
 }
 
-impl AsRef<Spanned> for Spanned {
-    fn as_ref(&self) -> &Spanned {
-        &self
-    }
-}
-
 impl Display for ValueType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let out = match self {
@@ -137,30 +131,10 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
             let interpreted = interpret(value);
 
             match interpreted {
-                Ok(spanned) => {
-                    // disallow assigning to assignments
-                    if let SpannedValue(Value::Assign(_, _), _) = spanned.clone() {
-                        let err = Error::TypeError {
-                            expected: vec![
-                                ValueType::Num,
-                                ValueType::String,
-                                ValueType::Bool,
-                                ValueType::Array,
-                            ],
-                            got: spanned,
-                            context: TypeErrorCtx::AssignToAssign,
-                        };
-
-                        errors.push(err);
-
-                        Err(errors)
-                    } else {
-                        Ok(SpannedValue(
-                            Value::Assign(name.clone(), Box::new(spanned.0)),
-                            span.clone(),
-                        ))
-                    }
-                }
+                Ok(spanned) => Ok(SpannedValue(
+                    Value::Assign(name.clone(), Box::new(spanned.0)),
+                    span.clone(),
+                )),
                 Err(error) => {
                     errors.extend(error);
 
@@ -201,14 +175,14 @@ pub fn interpret<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>
                 InfixOp::Add => lhs.add(rhs),
                 InfixOp::Sub => lhs.sub(rhs),
                 InfixOp::Equals => lhs.equals(rhs),
-                InfixOp::NotEquals => lhs.equals(rhs),
+                InfixOp::NotEquals => lhs.not_equals(rhs),
                 InfixOp::Lt => lhs.lt(rhs),
                 InfixOp::Gt => lhs.gt(rhs),
                 InfixOp::Lte => lhs.lte(rhs),
                 InfixOp::Gte => lhs.gte(rhs),
                 InfixOp::And => lhs.and(rhs),
                 InfixOp::Or => lhs.or(rhs),
-                InfixOp::In => lhs.is_in(rhs),
+                InfixOp::In => lhs.contains(rhs),
             };
 
             match output {
@@ -431,5 +405,29 @@ mod tests {
                 Box::new(Value::String("cool".to_owned()))
             )
         )
+    }
+
+    #[test]
+    fn interpret_equals() {
+        let parsed = &parse("60 == 60")[0];
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(interpreted, Value::Bool(true))
+    }
+
+    #[test]
+    fn interpret_equals_false() {
+        let parsed = &parse("50 == 60")[0];
+        let interpreted = interpret(parsed).unwrap();
+
+        assert_eq!(interpreted, Value::Bool(false))
+    }
+
+    #[test]
+    fn interpret_equals_fail() {
+        let parsed = &parse("50 == [50]")[0];
+        let interpreted = interpret(parsed);
+
+        assert!(interpreted.is_err())
     }
 }

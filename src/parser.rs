@@ -110,24 +110,6 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .then(op.then(product).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            let op = just(Token::Op("and".to_owned()))
-                .or(just(Token::Op("&&".to_owned())))
-                .labelled("and")
-                .to(InfixOp::And);
-            let and = sum
-                .clone()
-                .then(op.then(sum).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
-            let op = just(Token::Op("or".to_owned()))
-                .or(just(Token::Op("||".to_owned())))
-                .labelled("or")
-                .to(InfixOp::Or);
-            let or = and
-                .clone()
-                .then(op.then(and).repeated())
-                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
-
             let op = just(Token::Op("==".to_owned()))
                 .labelled("equals")
                 .to(InfixOp::Equals)
@@ -143,12 +125,30 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .or(just(Token::Op(">".to_owned()))
                     .labelled("greater than")
                     .to(InfixOp::Gt));
-            let compare = or
+            let compare = sum
                 .clone()
-                .then(op.then(or).repeated())
+                .then(op.then(sum).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            compare
+            let op = just(Token::Op("and".to_owned()))
+                .or(just(Token::Op("&&".to_owned())))
+                .labelled("and")
+                .to(InfixOp::And);
+            let and = compare
+                .clone()
+                .then(op.then(compare).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
+            let op = just(Token::Op("or".to_owned()))
+                .or(just(Token::Op("||".to_owned())))
+                .labelled("or")
+                .to(InfixOp::Or);
+            let or = and
+                .clone()
+                .then(op.then(and).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
+            or
         });
 
         let conditional = recursive(|cond| {

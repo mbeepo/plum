@@ -70,6 +70,12 @@ impl From<Spanned> for Vec<Spanned> {
     }
 }
 
+impl AsRef<Spanned> for Spanned {
+    fn as_ref(&self) -> &Spanned {
+        &self
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Num(f64),

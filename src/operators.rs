@@ -318,8 +318,41 @@ impl SpannedValue {
         }
     }
 
-    pub fn is_in(self, other: Self) -> Result<Value, Error> {
-        todo!()
+    pub fn not_equals(self, other: Self) -> Result<Value, Error> {
+        let out = self.equals(other)?;
+        out.not()
+    }
+
+    pub fn contains(self, other: Self) -> Result<Value, Error> {
+        let yes = match self.0 {
+            Value::Array(lhs) => lhs.contains(&SpannedValue(other.0, 0..1)),
+            Value::String(lhs) => match other.0 {
+                Value::String(rhs) => lhs.contains(&rhs),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: ValueType::String.into(),
+                        got: other,
+                        context: TypeErrorCtx::InfixOpRhs {
+                            lhs: ValueType::String,
+                            op: (InfixOp::In),
+                        },
+                    })
+                }
+            },
+            _ => {
+                return Err(Error::TypeError {
+                    expected: vec![ValueType::Array, ValueType::String],
+                    got: self,
+                    context: TypeErrorCtx::InfixOpLhs { op: InfixOp::In },
+                })
+            }
+        };
+
+        if yes {
+            Ok(Value::Bool(true))
+        } else {
+            Ok(Value::Bool(false))
+        }
     }
 
     pub fn not(self) -> Result<Value, Error> {
@@ -378,5 +411,127 @@ impl SpannedValue {
                 context: TypeErrorCtx::Index,
             }),
         }
+    }
+}
+
+// these operators lose information and should not be used in most cases
+// they exist for tests of SpannedValue operators and for the `!=` operator
+impl Value {
+    pub fn pow(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.pow(rhs)
+    }
+
+    pub fn mul(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.mul(rhs)
+    }
+
+    pub fn div(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.div(rhs)
+    }
+
+    pub fn modulus(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.modulus(rhs)
+    }
+
+    pub fn add(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.add(rhs)
+    }
+
+    pub fn sub(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.sub(rhs)
+    }
+
+    pub fn lt(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.lt(rhs)
+    }
+
+    pub fn gt(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.gt(rhs)
+    }
+
+    pub fn lte(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.lte(rhs)
+    }
+
+    pub fn gte(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.gte(rhs)
+    }
+
+    pub fn and(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.and(rhs)
+    }
+
+    pub fn or(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.or(rhs)
+    }
+
+    pub fn equals(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.equals(rhs)
+    }
+
+    pub fn not_equals(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.not_equals(rhs)
+    }
+
+    pub fn contains(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.contains(rhs)
+    }
+
+    pub fn not(self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+
+        lhs.not()
+    }
+
+    pub fn index(self, other: Self) -> Result<Value, Error> {
+        let lhs = SpannedValue(self, 0..1);
+        let rhs = SpannedValue(other, 1..2);
+
+        lhs.index(rhs)
     }
 }

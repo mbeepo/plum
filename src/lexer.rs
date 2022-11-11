@@ -79,6 +79,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "null" => Token::Null,
         "and" => Token::Op("and".to_owned()),
         "or" => Token::Op("or".to_owned()),
+        "in" => Token::Op("in".to_owned()),
         _ => Token::Ident(ident),
     });
 
