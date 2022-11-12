@@ -178,12 +178,7 @@ fn gather_deps_errors(deps: HashMap<String, (Vec<String>, Span)>) -> Vec<Error> 
     let errs: Vec<Error> = Vec::new();
 
     for (name, (inner_deps, span)) in deps {
-        let mut current: String = name;
-        let mut current_deps: Vec<String>;
-
-        'infinite: loop {
-            for dep in current_deps {}
-        }
+        errs.push(Error::ReferenceError { name, span })
     }
 
     errs
