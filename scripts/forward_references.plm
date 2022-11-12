@@ -1,0 +1,4 @@
+nice = cool + 12;
+cool = epic + 14;
+epic = 14;
+wicked = nice * 2; 
