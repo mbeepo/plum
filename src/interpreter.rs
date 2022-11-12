@@ -32,7 +32,7 @@ impl From<String> for SpannedIdent {
     }
 }
 
-pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
     let input = input.into();
     let len = input.len();
 
@@ -90,11 +90,12 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
 
     // set an order to evaluate variables in
     while deps.len() > 0 {
-        let changed = false;
+        let mut changed = false;
 
-        'outer: for (name, (inner_deps, span)) in deps {
+        'outer: for (name, (inner_deps, span)) in deps.clone() {
             if inner_deps.len() == 0 {
                 changed = true;
+                deps.remove(&name);
                 order.push_back(SpannedIdent { name, span });
             } else {
                 for dep in inner_deps {
@@ -104,19 +105,24 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
                 }
 
                 changed = true;
-                order.push_back(SpannedIdent { name, span });
+                deps.remove(&name);
+                order.push_back(SpannedIdent {
+                    name: name.clone(),
+                    span,
+                });
             }
         }
 
         if !changed {
-            let chain: Vec<SpannedIdent> = Vec::new();
-            let first = deps.keys().next().unwrap();
+            let mut chain: Vec<SpannedIdent> = Vec::new();
+            let cloned = deps.clone();
+            let (first_key, first) = cloned.iter().next().unwrap();
 
             return Err(gather_deps_errors(
-                first.clone(),
+                first_key.clone(),
                 &mut chain,
                 &mut deps,
-                &deps.get(first).unwrap().1,
+                &first.1,
             ));
         }
     }
@@ -138,6 +144,11 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
     let mut vars: HashMap<String, Value> = HashMap::new();
 
     // finally evaluate the variables
+    for SpannedIdent { name, span: _ } in order {
+        let evaluated = eval(exprs.get(&name).unwrap(), vars.clone())?;
+
+        vars.insert(name, evaluated.0);
+    }
 
     if errs.len() > 0 {
         Err(errs)
@@ -189,24 +200,31 @@ fn gather_deps_errors(
     deps: &mut HashMap<String, (Vec<String>, Span)>,
     parent_span: &Span,
 ) -> Vec<Error> {
-    let errs: Vec<Error> = Vec::new();
+    let mut errs: Vec<Error> = Vec::new();
 
-    if chain.contains(&SpannedIdent::from(name)) {
-        let err = Error::RecursionError { chain: *chain };
+    if chain.contains(&SpannedIdent::from(name.clone())) {
+        let err = Error::RecursionError {
+            chain: chain.clone(),
+        };
 
         errs.push(err);
-    } else if let Some((next_deps, span)) = deps.get(&name) {
-        chain.push(SpannedIdent { name, span: *span });
+    } else if let Some((next_deps, span)) = deps.clone().get(&name) {
+        chain.push(SpannedIdent {
+            name,
+            span: span.clone(),
+        });
 
         for dep in next_deps {
-            errs.extend(gather_deps_errors(*dep, chain, deps, parent_span))
+            errs.extend(gather_deps_errors(dep.clone(), chain, deps, parent_span))
         }
     } else {
         // name is not in deps, so it has to be undefined
         let err = Error::ReferenceError {
             name,
-            span: *parent_span,
+            span: parent_span.clone(),
         };
+
+        errs.push(err);
     }
 
     errs
