@@ -48,7 +48,7 @@ pub enum Error {
         new_span: Span,
     },
     RecursionError {
-        trail: Vec<SpannedIdent>,
+        chain: Vec<SpannedIdent>,
     },
 }
 

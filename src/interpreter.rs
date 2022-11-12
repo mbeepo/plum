@@ -9,6 +9,7 @@ use crate::{
     lexer, parser,
 };
 
+#[derive(Clone, Debug)]
 pub struct SpannedIdent {
     name: String,
     span: Span,
@@ -108,7 +109,15 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
         }
 
         if !changed {
-            return Err(gather_deps_errors(deps));
+            let chain: Vec<SpannedIdent> = Vec::new();
+            let first = deps.keys().next().unwrap();
+
+            return Err(gather_deps_errors(
+                first.clone(),
+                &mut chain,
+                &mut deps,
+                &deps.get(first).unwrap().1,
+            ));
         }
     }
 
@@ -174,11 +183,30 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
     deps
 }
 
-fn gather_deps_errors(deps: HashMap<String, (Vec<String>, Span)>) -> Vec<Error> {
+fn gather_deps_errors(
+    name: String,
+    chain: &mut Vec<SpannedIdent>,
+    deps: &mut HashMap<String, (Vec<String>, Span)>,
+    parent_span: &Span,
+) -> Vec<Error> {
     let errs: Vec<Error> = Vec::new();
 
-    for (name, (inner_deps, span)) in deps {
-        errs.push(Error::ReferenceError { name, span })
+    if chain.contains(&SpannedIdent::from(name)) {
+        let err = Error::RecursionError { chain: *chain };
+
+        errs.push(err);
+    } else if let Some((next_deps, span)) = deps.get(&name) {
+        chain.push(SpannedIdent { name, span: *span });
+
+        for dep in next_deps {
+            errs.extend(gather_deps_errors(*dep, chain, deps, parent_span))
+        }
+    } else {
+        // name is not in deps, so it has to be undefined
+        let err = Error::ReferenceError {
+            name,
+            span: *parent_span,
+        };
     }
 
     errs
