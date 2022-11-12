@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use chumsky::{Parser, Stream};
 
@@ -8,6 +8,28 @@ use crate::{
     eval::{eval, SpannedValue, Value},
     lexer, parser,
 };
+
+pub struct SpannedIdent {
+    name: String,
+    span: Span,
+}
+
+impl PartialEq<SpannedIdent> for SpannedIdent {
+    fn eq(&self, other: &SpannedIdent) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for SpannedIdent {}
+
+impl From<String> for SpannedIdent {
+    fn from(f: String) -> Self {
+        Self {
+            name: f,
+            span: 0..1,
+        }
+    }
+}
 
 pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
     let input = input.into();
@@ -30,9 +52,10 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
     }
 
     let parsed = parsed.unwrap();
-    let mut deps: HashMap<String, Vec<String>> = HashMap::new();
+
     let mut spans: HashMap<String, Span> = HashMap::new();
     let mut errs: Vec<Error> = Vec::new();
+    let mut deps: HashMap<String, (Vec<String>, Span)> = HashMap::new();
 
     // check dependencies of variables
     for expr in parsed.iter() {
@@ -50,7 +73,7 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
                         errs.push(err);
                     } else {
                         spans.insert(name.clone(), span.clone());
-                        deps.insert(name.clone(), value_deps.clone());
+                        deps.insert(name.to_owned(), (value_deps.clone(), span.clone()));
                     }
                 }
             }
@@ -62,21 +85,50 @@ pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec
         return Err(errs);
     }
 
-    let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut order: VecDeque<SpannedIdent> = VecDeque::new();
 
-    // actually evaluate the variables
+    // set an order to evaluate variables in
+    while deps.len() > 0 {
+        let changed = false;
+
+        'outer: for (name, (inner_deps, span)) in deps {
+            if inner_deps.len() == 0 {
+                changed = true;
+                order.push_back(SpannedIdent { name, span });
+            } else {
+                for dep in inner_deps {
+                    if !order.contains(&SpannedIdent::from(dep)) {
+                        continue 'outer;
+                    }
+                }
+
+                changed = true;
+                order.push_back(SpannedIdent { name, span });
+            }
+        }
+
+        if !changed {
+            return Err(gather_deps_errors(deps));
+        }
+    }
+
+    let mut exprs: HashMap<String, Spanned> = HashMap::new();
+
+    // gather the variable assignments without evaluating them
     for expr in parsed.iter() {
-        let interpreted = eval(expr, vars.clone())?;
-
-        match interpreted {
-            SpannedValue(Value::Assign(names, value), _) => {
+        match expr {
+            Spanned(Expr::Assign { names, value }, _) => {
                 for name in names {
-                    vars.insert(name, *value.clone());
+                    exprs.insert(name.clone(), *value.clone());
                 }
             }
             _ => {}
         }
     }
+
+    let mut vars: HashMap<String, Value> = HashMap::new();
+
+    // finally evaluate the variables
 
     if errs.len() > 0 {
         Err(errs)
@@ -112,7 +164,7 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
             deps.extend(rhs_deps);
         }
         Spanned(Expr::Literal(_), _) => {}
-        Spanned(Expr::Assign { names, value }, _) => {
+        Spanned(Expr::Assign { names: _, value: _ }, _) => {
             unreachable!("Assigns can never be in the value of an assignment")
         }
         Spanned(Expr::Error, _) => {}
@@ -120,6 +172,21 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
     }
 
     deps
+}
+
+fn gather_deps_errors(deps: HashMap<String, (Vec<String>, Span)>) -> Vec<Error> {
+    let errs: Vec<Error> = Vec::new();
+
+    for (name, (inner_deps, span)) in deps {
+        let mut current: String = name;
+        let mut current_deps: Vec<String>;
+
+        'infinite: loop {
+            for dep in current_deps {}
+        }
+    }
+
+    errs
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use chumsky::prelude::Simple;
 use crate::{
     ast::{InfixOp, Span, Token},
     eval::{SpannedValue, ValueType},
+    interpreter::SpannedIdent,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +46,9 @@ pub enum Error {
         name: String,
         old_span: Span,
         new_span: Span,
+    },
+    RecursionError {
+        trail: Vec<SpannedIdent>,
     },
 }
 
