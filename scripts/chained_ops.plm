@@ -1,0 +1,8 @@
+nice = 100;
+sick = 4;
+
+wicked = 32;
+cool = 8;
+
+gnarly = wicked / cool;
+epic = nice * sick / gnarly;

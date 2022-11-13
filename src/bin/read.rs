@@ -1,12 +1,12 @@
 use std::env;
 
-use plum::{error::ChumskyAriadne, interpreter::interpret};
+use plum::{error::ChumskyAriadne, interpreter::interpret_full};
 
 fn main() {
     let path = &env::args().collect::<Vec<String>>()[1];
     let file = std::fs::read(path).unwrap();
     let source = String::from_utf8(file).unwrap();
-    let evaluated = interpret(&source);
+    let evaluated = interpret_full(&source);
 
     match evaluated {
         Err(errs) => {
