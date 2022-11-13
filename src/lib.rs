@@ -1,4 +1,5 @@
 mod ast;
+mod codegen;
 pub mod error;
 pub mod eval;
 pub mod interpreter;

@@ -32,7 +32,16 @@ impl From<String> for SpannedIdent {
     }
 }
 
-fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+pub fn interpret_full(
+    input: impl Into<String>,
+) -> Result<
+    (
+        HashMap<String, Value>,       // values
+        HashMap<String, Vec<String>>, // dependencies
+        HashMap<String, String>,      // generated source
+    ),
+    Vec<Error>,
+> {
     let input = input.into();
     let len = input.len();
 
@@ -57,6 +66,7 @@ fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Err
     let mut spans: HashMap<String, Span> = HashMap::new();
     let mut errs: Vec<Error> = Vec::new();
     let mut deps: HashMap<String, (Vec<String>, Span)> = HashMap::new();
+    let mut out_deps: HashMap<String, Vec<String>> = HashMap::new();
 
     // check dependencies of variables
     for expr in parsed.iter() {
@@ -75,6 +85,7 @@ fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Err
                     } else {
                         spans.insert(name.clone(), span.clone());
                         deps.insert(name.to_owned(), (value_deps.clone(), span.clone()));
+                        out_deps.insert(name.to_owned(), value_deps.clone());
                     }
                 }
             }
@@ -142,19 +153,35 @@ fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Err
     }
 
     let mut vars: HashMap<String, Value> = HashMap::new();
+    let mut source: HashMap<String, String> = HashMap::new();
 
-    // finally evaluate the variables
+    // finally, evaluate the variables
     for SpannedIdent { name, span: _ } in order {
-        let evaluated = eval(exprs.get(&name).unwrap(), vars.clone())?;
+        // into value
+        let evaluated = eval(exprs.get(&name).unwrap(), vars.clone());
+        // into source
+        let expr_source = exprs.get(&name).unwrap().clone().into();
+        source.insert(name.clone(), expr_source);
 
-        vars.insert(name, evaluated.0);
+        match evaluated {
+            Ok(e) => {
+                vars.insert(name, e.0);
+            }
+            Err(e) => {
+                errs.extend(e);
+            }
+        }
     }
 
     if errs.len() > 0 {
         Err(errs)
     } else {
-        Ok(vars)
+        Ok((vars, out_deps, source))
     }
+}
+
+fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+    Ok(interpret_full(input)?.0)
 }
 
 fn get_deps(expr: &Spanned) -> Vec<String> {
