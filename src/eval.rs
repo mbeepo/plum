@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use crate::{
     ast::{Expr, InfixOp, Literal, Spanned},
-    error::Error,
+    error::{Error, TypeErrorCtx},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -265,6 +265,37 @@ pub fn eval<T: AsRef<Spanned>>(
                         name: name.clone(),
                         span: span.clone(),
                     };
+                    errors.push(err);
+
+                    Err(errors)
+                }
+            }
+        }
+        Spanned(
+            Expr::Conditional {
+                condition,
+                inner,
+                other,
+            },
+            span,
+        ) => {
+            let evaluated = eval(condition, vars.clone())?;
+
+            match evaluated {
+                SpannedValue(Value::Bool(enter), _) => {
+                    if enter {
+                        eval(inner, vars)
+                    } else {
+                        eval(other, vars)
+                    }
+                }
+                _ => {
+                    let err = Error::TypeError {
+                        expected: ValueType::Bool.into(),
+                        got: evaluated,
+                        context: TypeErrorCtx::Condition,
+                    };
+
                     errors.push(err);
 
                     Err(errors)

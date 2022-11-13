@@ -1,0 +1,9 @@
+epic = if nice * cool == sick {
+	"nice !!!"
+} else {
+	"fucce"
+};
+
+nice = 23;
+cool = 3;
+sick = 69;

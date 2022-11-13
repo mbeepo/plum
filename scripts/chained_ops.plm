@@ -4,5 +4,4 @@ sick = 4;
 wicked = 32;
 cool = 8;
 
-gnarly = wicked / cool;
-epic = nice * sick / gnarly;
+epic = nice * sick / wicked / cool;

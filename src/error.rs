@@ -21,6 +21,7 @@ pub enum TypeErrorCtx {
     IndexOf,
     AssignToAssign,
     Contains { rhs: ValueType },
+    Condition,
 }
 
 #[derive(Clone, Debug)]

@@ -192,29 +192,33 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
             deps.push(name.clone());
         }
         Spanned(Expr::InfixOp(lhs, _, rhs), _) => {
-            let lhs_deps = get_deps(lhs);
-            let rhs_deps = get_deps(rhs);
-
-            deps.extend(lhs_deps);
-            deps.extend(rhs_deps);
+            deps.extend(get_deps(lhs));
+            deps.extend(get_deps(rhs));
         }
         Spanned(Expr::Index(lhs, idx), _) => {
-            let lhs_deps = get_deps(lhs);
-            let idx_deps = get_deps(idx);
-
-            deps.extend(lhs_deps);
-            deps.extend(idx_deps);
+            deps.extend(get_deps(lhs));
+            deps.extend(get_deps(idx));
         }
         Spanned(Expr::Not(rhs), _) => {
-            let rhs_deps = get_deps(rhs);
-
-            deps.extend(rhs_deps);
+            deps.extend(get_deps(rhs));
         }
         Spanned(Expr::Literal(_), _) => {}
         Spanned(Expr::Assign { names: _, value: _ }, _) => {
             unreachable!("Assigns can never be in the value of an assignment")
         }
         Spanned(Expr::Error, _) => {}
+        Spanned(
+            Expr::Conditional {
+                condition,
+                inner,
+                other,
+            },
+            _,
+        ) => {
+            deps.extend(get_deps(condition));
+            deps.extend(get_deps(inner));
+            deps.extend(get_deps(other));
+        }
         _ => todo!(),
     }
 

@@ -1,6 +1,9 @@
-use chumsky::primitive::Container;
+use std::collections::HashMap;
 
-use crate::ast::{Expr, InfixOp, Literal, Spanned};
+use crate::{
+    ast::{Expr, InfixOp, Literal, Spanned},
+    eval::SpannedValue,
+};
 
 impl InfixOp {
     fn get_binding_power(&self) -> u8 {
@@ -65,7 +68,7 @@ impl From<&Spanned> for String {
                         "false".to_owned()
                     }
                 }
-                Literal::String(inner) => inner.clone(),
+                Literal::String(inner) => r#"""#.to_owned() + inner + r#"""#,
                 Literal::Num(inner) => inner.to_string(),
                 Literal::Null => "[NULL]".to_owned(),
             },
@@ -90,20 +93,6 @@ impl From<&Spanned> for String {
                     _ => rhs_str,
                 };
 
-                let (lhs_str, rhs_str) = match (*lhs.clone(), *rhs.clone()) {
-                    (
-                        Spanned(Expr::InfixOp(_, op1, _), _),
-                        Spanned(Expr::InfixOp(_, op2, _), _),
-                    ) => {
-						let lhs_bp = op1.get_binding_power();
-						let rhs_bp = op2.get_binding_power();
-
-						if lhs_bp > rhs_bp {
-
-						}
-					}
-                }
-
                 lhs_str + &op_str + &rhs_str
             }
             Spanned(Expr::Index(lhs, idx), _) => {
@@ -118,6 +107,32 @@ impl From<&Spanned> for String {
                 lhs_str + "[" + &idx_str + "]"
             }
             Spanned(Expr::Error, _) => "[ERROR]".to_owned(),
+            Spanned(
+                Expr::Conditional {
+                    condition,
+                    inner,
+                    other,
+                },
+                _,
+            ) => {
+                let cond_str = String::from(*condition.clone());
+                let inner_str = String::from(*inner.clone());
+                let other_str = String::from(*other.clone());
+
+                let other_str = match *other.clone() {
+                    Spanned(
+                        Expr::Conditional {
+                            condition: _,
+                            inner: _,
+                            other: _,
+                        },
+                        _,
+                    ) => other_str,
+                    _ => "{ ".to_owned() + &other_str,
+                };
+
+                "if ".to_owned() + &cond_str + " { " + &inner_str + " } else " + &other_str + " }"
+            }
             _ => todo!(),
         }
     }
