@@ -21,29 +21,30 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     // strings
     let escape = just('\\').ignore_then(
-        just('\\')
-            .or(just('/'))
-            .or(just('"'))
-            .or(just('\''))
-            .or(just('b').to('\x08'))
-            .or(just('f').to('\x0C'))
-            .or(just('n').to('\n'))
-            .or(just('r').to('\r'))
-            .or(just('t').to('\t'))
-            .or(just('u').ignore_then(
-                filter(|c: &char| c.is_digit(16))
-                    .repeated()
-                    .exactly(4)
-                    .collect::<String>()
-                    .validate(|digits, span, emit| {
-                        char::from_u32(u32::from_str_radix(&digits, 16).unwrap()).unwrap_or_else(
-                            || {
-                                emit(Simple::custom(span, "invalid unicode character"));
-                                '\u{FFFD}' // unicode replacement character
-                            },
-                        )
-                    }),
-            )),
+        choice((
+            just('\\'),
+            just('/'),
+            just('"'),
+            just('\''),
+            just('b').to('\x08'),
+            just('f').to('\x0C'),
+            just('n').to('\n'),
+            just('r').to('\r'),
+            just('t').to('\t'),
+            just('u'),
+        ))
+        .ignore_then(
+            filter(|c: &char| c.is_digit(16))
+                .repeated()
+                .exactly(4)
+                .collect::<String>()
+                .validate(|digits, span, emit| {
+                    char::from_u32(u32::from_str_radix(&digits, 16).unwrap()).unwrap_or_else(|| {
+                        emit(Simple::custom(span, "invalid unicode character"));
+                        '\u{FFFD}' // unicode replacement character
+                    })
+                }),
+        ),
     );
 
     // the d stands for double quotes
@@ -61,7 +62,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     let string = d_string.or(s_string).map(Token::String).labelled("string");
 
     // operators
-    let op = one_of("+-*/!=<>&|")
+    let op = one_of("+-*/!=<>&|.")
         .repeated()
         .at_least(1)
         .collect::<String>()
@@ -83,12 +84,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         _ => Token::Ident(ident),
     });
 
-    let token = num
-        .or(string)
-        .or(op)
-        .or(ctrl)
-        .or(ident)
-        .recover_with(skip_then_retry_until([]));
+    let token = choice((num, string, op, ctrl, ident)).recover_with(skip_then_retry_until([]));
 
     let comment = just("//").then(take_until(just('\n'))).padded();
 

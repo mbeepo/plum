@@ -13,6 +13,7 @@ pub enum Value {
     Array(Vec<SpannedValue>),
     Error,
     Assign(Vec<String>, Box<Value>),
+    Range(Range<isize>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -24,6 +25,7 @@ pub enum ValueType {
     Array,
     Error,
     Assign,
+    Range,
 }
 
 #[derive(Clone, Debug)]
@@ -74,6 +76,7 @@ impl Display for ValueType {
             ValueType::Array => "Array",
             ValueType::Error => "[ERROR]",
             ValueType::Assign => "Assign",
+            ValueType::Range => "Range",
         };
 
         write!(f, "{}", out)
@@ -89,6 +92,7 @@ impl Value {
             Value::Array(_) => ValueType::Array,
             Value::Error => ValueType::Error,
             Value::Assign(_, _) => ValueType::Assign,
+            Value::Range(_) => ValueType::Range,
         }
     }
 }
@@ -186,6 +190,8 @@ pub fn eval<T: AsRef<Spanned>>(
                 InfixOp::And => lhs.and(rhs),
                 InfixOp::Or => lhs.or(rhs),
                 InfixOp::In => lhs.contains(rhs),
+                InfixOp::Range => lhs.range(rhs),
+                InfixOp::IRange => lhs.irange(rhs),
             };
 
             match output {

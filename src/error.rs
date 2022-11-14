@@ -20,8 +20,8 @@ pub enum TypeErrorCtx {
     Index,
     IndexOf,
     AssignToAssign,
-    Contains { rhs: ValueType },
     Condition,
+    Range,
 }
 
 #[derive(Clone, Debug)]

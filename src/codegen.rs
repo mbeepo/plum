@@ -1,13 +1,10 @@
-use std::collections::HashMap;
-
-use crate::{
-    ast::{Expr, InfixOp, Literal, Spanned},
-    eval::SpannedValue,
-};
+use crate::ast::{Expr, InfixOp, Literal, Spanned};
 
 impl InfixOp {
     fn get_binding_power(&self) -> u8 {
         match self {
+            InfixOp::IRange => 68,
+            InfixOp::Range => 66,
             InfixOp::Pow => 64,
             InfixOp::Mul | InfixOp::Div | InfixOp::Mod => 62,
             InfixOp::Add | InfixOp::Sub => 60,
@@ -42,6 +39,8 @@ impl From<InfixOp> for String {
             InfixOp::In => " in ",
             InfixOp::And => " && ",
             InfixOp::Or => " || ",
+            InfixOp::Range => "..",
+            InfixOp::IRange => "..=",
         }
         .to_owned()
     }

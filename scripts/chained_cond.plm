@@ -1,0 +1,11 @@
+epic = if nice < 20 {
+	"nice !!!"
+} else if nice > 22 {
+	"fucce"
+} else {
+	"wacky"
+};
+
+nice = 23;
+cool = 3;
+sick = 69;

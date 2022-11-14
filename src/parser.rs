@@ -25,7 +25,8 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .clone()
                 .delimited_by(just(Token::Ctrl('[')), just(Token::Ctrl(']')))
                 .map(Literal::Array)
-                .map(Expr::Literal);
+                .map(Expr::Literal)
+                .map_with_span(Spanned);
 
             let assign = ident
                 .clone()
@@ -42,14 +43,13 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                     value: Box::new(val),
                 });
 
-            let atom = val
-                .or(assign)
-                .or(ident.map(Expr::Ident))
-                .or(array)
-                .map_with_span(Spanned)
-                .or(expr
-                    .clone()
-                    .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
+            let single_expr = expr
+                .clone()
+                .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
+
+            let ident = ident.map(Expr::Ident);
+
+            let atom = choice((assign, ident, array, single_expr))
                 .recover_with(nested_delimiters(
                     Token::Ctrl('('),
                     Token::Ctrl(')'),
@@ -85,10 +85,22 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                     Spanned(Expr::Index(Box::new(lhs), Box::new(rhs)), span)
                 });
 
-            let op = just(Token::Op("**".to_owned())).to(InfixOp::Pow);
-            let pow = index
+            let op = just(Token::Op("..=".to_owned())).to(InfixOp::IRange);
+            let irange = index
                 .clone()
                 .then(op.then(index).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
+            let op = just(Token::Op("..".to_owned())).to(InfixOp::Range);
+            let range = irange
+                .clone()
+                .then(op.then(irange).repeated())
+                .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
+
+            let op = just(Token::Op("**".to_owned())).to(InfixOp::Pow);
+            let pow = range
+                .clone()
+                .then(op.then(range).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
             let op = just(Token::Op("*".to_owned()))
@@ -578,6 +590,34 @@ mod tests {
                 names: vec!["these".to_owned(), "are".to_owned(), "all".to_owned()],
                 value: Box::new(Spanned::from(12.0))
             }
+        )
+    }
+
+    #[test]
+    fn parse_inclusive_range() {
+        let parsed = parse("0..=10");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(0.0)),
+                InfixOp::IRange,
+                Box::new(Spanned::from(10.0))
+            )
+        )
+    }
+
+    #[test]
+    fn parse_exclusive_range() {
+        let parsed = parse("0..10");
+
+        assert_eq!(
+            parsed[0],
+            Expr::InfixOp(
+                Box::new(Spanned::from(0.0)),
+                InfixOp::Range,
+                Box::new(Spanned::from(10.0))
+            )
         )
     }
 }

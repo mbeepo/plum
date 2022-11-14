@@ -422,6 +422,53 @@ impl SpannedValue {
             }),
         }
     }
+
+    pub fn range(self, rhs: Self) -> Result<Value, Error> {
+        match self.0 {
+            Value::Num(e) => {
+                if e == e.trunc() {
+                    let e = e as isize;
+
+                    match rhs.0 {
+                        Value::Num(f) => {
+                            if f == f.trunc() {
+                                let f = f as isize;
+
+                                Ok(Value::Range(e..f))
+                            } else {
+                                Err(Error::TypeError {
+                                    expected: ValueType::Int.into(),
+                                    got: rhs,
+                                    context: TypeErrorCtx::Range,
+                                })
+                            }
+                        }
+                        _ => Err(Error::TypeError {
+                            expected: ValueType::Num.into(),
+                            got: rhs,
+                            context: TypeErrorCtx::Range,
+                        }),
+                    }
+                } else {
+                    Err(Error::TypeError {
+                        expected: ValueType::Int.into(),
+                        got: self,
+                        context: TypeErrorCtx::Range,
+                    })
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: ValueType::Num.into(),
+                got: self,
+                context: TypeErrorCtx::Range,
+            }),
+        }
+    }
+
+    pub fn irange(self, rhs: Self) -> Result<Value, Error> {
+        let rhs = rhs.add(SpannedValue(Value::Num(1.0), 0..1))?;
+        self.range(SpannedValue(rhs, 0..1))
+    }
 }
 
 // these operators lose information and should not be used in most cases

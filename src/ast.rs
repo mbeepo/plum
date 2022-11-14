@@ -102,6 +102,8 @@ pub enum InfixOp {
     Add,
     Sub,
     In,
+    Range,
+    IRange,
 }
 
 impl Display for InfixOp {
@@ -122,6 +124,8 @@ impl Display for InfixOp {
             Self::Add => "Add",
             Self::Sub => "Sub",
             Self::In => "In",
+            Self::Range => "Range",
+            Self::IRange => "IRange",
         };
 
         write!(f, "{}", out)
