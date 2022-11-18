@@ -41,15 +41,15 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .map(|(names, val)| Expr::Assign {
                     names,
                     value: Box::new(val),
-                });
+                })
+                .map_with_span(Spanned);
 
             let single_expr = expr
                 .clone()
                 .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
 
             let ident = ident.map(Expr::Ident);
-
-            let atom = choice((assign, ident, array, single_expr))
+            let atom = choice((assign, ident.map_with_span(Spanned), array, single_expr))
                 .recover_with(nested_delimiters(
                     Token::Ctrl('('),
                     Token::Ctrl(')'),
@@ -71,7 +71,6 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 ));
 
             let index = atom
-                .clone()
                 .then(
                     raw_expr
                         .clone()
@@ -106,12 +105,14 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
             let op = just(Token::Op("*".to_owned()))
                 .labelled("multiply")
                 .to(InfixOp::Mul)
-                .or(just(Token::Op("/".to_owned()))
-                    .labelled("divide")
-                    .to(InfixOp::Div))
-                .or(just(Token::Op("%".to_owned()))
-                    .labelled("modulus")
-                    .to(InfixOp::Mod));
+                .or(choice(
+                    just(Token::Op("/".to_owned()))
+                        .labelled("divide")
+                        .to(InfixOp::Div),
+                    just(Token::Op("%".to_owned()))
+                        .labelled("modulus")
+                        .to(InfixOp::Mod),
+                ));
             let product = pow
                 .clone()
                 .then(op.then(pow).repeated())
@@ -131,18 +132,20 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
             let op = just(Token::Op("==".to_owned()))
                 .labelled("equals")
                 .to(InfixOp::Equals)
-                .or(just(Token::Op("<=".to_owned()))
-                    .labelled("less than or equal")
-                    .to(InfixOp::Lte))
-                .or(just(Token::Op(">=".to_owned()))
-                    .labelled("greater than or equal")
-                    .to(InfixOp::Gte))
-                .or(just(Token::Op("<".to_owned()))
-                    .labelled("less than")
-                    .to(InfixOp::Lt))
-                .or(just(Token::Op(">".to_owned()))
-                    .labelled("greater than")
-                    .to(InfixOp::Gt));
+                .or(choice((
+                    just(Token::Op("<=".to_owned()))
+                        .labelled("less than or equal")
+                        .to(InfixOp::Lte),
+                    just(Token::Op(">=".to_owned()))
+                        .labelled("greater than or equal")
+                        .to(InfixOp::Gte),
+                    just(Token::Op("<".to_owned()))
+                        .labelled("less than")
+                        .to(InfixOp::Lt),
+                    just(Token::Op(">".to_owned()))
+                        .labelled("greater than")
+                        .to(InfixOp::Gt),
+                )));
             let compare = sum
                 .clone()
                 .then(op.then(sum).repeated())
