@@ -1,10 +1,12 @@
+use std::ops::Range;
+
 use ariadne::{ColorGenerator, Fmt, Label, Report, Source};
 use chumsky::prelude::Simple;
 
 use crate::{
     ast::{InfixOp, Span, Token},
-    eval::{SpannedValue, ValueType},
     interpreter::SpannedIdent,
+    value::{SpannedValue, ValueType},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -32,7 +34,7 @@ pub enum Error {
         context: TypeErrorCtx,
     },
     IndexError {
-        index: usize,
+        index: isize,
         len: usize,
         lspan: Span,
         rspan: Span,
@@ -50,6 +52,12 @@ pub enum Error {
     },
     RecursionError {
         chain: Vec<SpannedIdent>,
+    },
+    RangeIndexError {
+        index: Range<isize>,
+        len: usize,
+        lspan: Span,
+        rspan: Span,
     },
 }
 
@@ -152,7 +160,10 @@ impl ChumskyAriadne for Error {
                             .eprint((source_file, Source::from(source)))
                             .unwrap();
                     }
-                    _ => todo!(),
+                    e => {
+                        println!("{:#?}", e);
+                        todo!()
+                    }
                 }
             }
             Self::IndexError {
@@ -164,14 +175,20 @@ impl ChumskyAriadne for Error {
                 let a = colors.next();
                 let b = colors.next();
 
-                let note = if len == index {
-                    let c = colors.next();
-                    let max_idx = index - 1;
+                let note = if *index > 0 {
+                    let uindex = *index as usize;
 
-                    format!(
-                        "Arrays are zero-indexed, the index of the last element is {}",
-                        max_idx.fg(c)
-                    )
+                    if *len == uindex {
+                        let c = colors.next();
+                        let max_idx = index - 1;
+
+                        format!(
+                            "Arrays are zero-indexed, the index of the last element is {}",
+                            max_idx.fg(c)
+                        )
+                    } else {
+                        "Index must fit within the bounds of the accessed sequence".to_owned()
+                    }
                 } else {
                     "Index must fit within the bounds of the accessed sequence".to_owned()
                 };
@@ -224,7 +241,10 @@ impl ChumskyAriadne for Error {
                     .eprint((source_file, Source::from(source)))
                     .unwrap()
             }
-            _ => todo!(),
+            e => {
+                dbg!(e);
+                todo!()
+            }
         }
     }
 }

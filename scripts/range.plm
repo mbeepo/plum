@@ -1,0 +1,6 @@
+cool = 0..4;
+nice = "wonderful";
+
+epic = nice[cool];
+sick = nice[-9..2];
+wicked = nice[-1..=5];

@@ -5,8 +5,9 @@ use chumsky::{Parser, Stream};
 use crate::{
     ast::{Expr, Span, Spanned},
     error::Error,
-    eval::{eval, SpannedValue, Value},
+    eval::eval,
     lexer, parser,
+    value::Value,
 };
 
 #[derive(Clone, Debug)]
@@ -263,7 +264,7 @@ fn gather_deps_errors(
 
 #[cfg(test)]
 mod tests {
-    use crate::eval::Value;
+    use crate::value::Value;
 
     use super::interpret;
 

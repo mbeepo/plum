@@ -1,7 +1,7 @@
 use crate::{
     ast::InfixOp,
     error::{Error, TypeErrorCtx},
-    eval::{SpannedValue, Value, ValueType},
+    value::{SpannedValue, Value, ValueType},
 };
 
 // da big SpannedValue operation set
@@ -367,56 +367,121 @@ impl SpannedValue {
     }
 
     pub fn index(self, idx: Self) -> Result<Value, Error> {
+        let inner = self.0.clone();
+
+        let len = match &inner {
+            Value::Array(f) => f.len(),
+            Value::String(f) => f.len(),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: vec![ValueType::Array, ValueType::String],
+                    got: self,
+                    context: TypeErrorCtx::IndexOf,
+                })
+            }
+        };
+
         match idx.0 {
             Value::Num(e) => {
                 if e == e.trunc() {
-                    let e = e as usize;
+                    let e = e as isize;
+                    let e_abs = e.abs() as usize;
+                    let cond = if e < 0 { len >= e_abs } else { len > e_abs };
 
-                    match self.0 {
-                        Value::Array(f) => {
-                            let len = f.len();
+                    if cond {
+                        let e2 = if e < 0 { len - e_abs } else { e_abs };
 
-                            if len > e {
-                                Ok(f[e].clone().0)
-                            } else {
-                                Err(Error::IndexError {
-                                    index: e,
-                                    len,
-                                    lspan: self.1,
-                                    rspan: idx.1,
-                                })
+                        match inner {
+                            Value::Array(f) => Ok(f[e2].clone().0),
+                            Value::String(f) => {
+                                Ok(Value::String(f.chars().nth(e2).unwrap().to_string()))
                             }
+                            _ => unreachable!("Checked when checked length at start"),
                         }
-                        Value::String(f) => {
-                            let len = f.len();
-
-                            if len > e {
-                                Ok(Value::String(f.chars().nth(e).unwrap().to_string()))
-                            } else {
-                                Err(Error::IndexError {
-                                    index: e,
-                                    len,
-                                    lspan: self.1,
-                                    rspan: idx.1,
-                                })
-                            }
-                        }
-                        _ => Err(Error::TypeError {
-                            expected: vec![ValueType::Array, ValueType::String],
-                            got: self,
-                            context: TypeErrorCtx::IndexOf,
-                        }),
+                    } else {
+                        Err(Error::IndexError {
+                            index: e,
+                            len,
+                            lspan: self.1,
+                            rspan: idx.1,
+                        })
                     }
                 } else {
                     Err(Error::TypeError {
-                        expected: ValueType::Int.into(),
+                        expected: vec![ValueType::Num, ValueType::Range],
                         got: self,
                         context: TypeErrorCtx::Index,
                     })
                 }
             }
+            Value::Range(e) => {
+                let start = e.start;
+                let end = e.end;
+                let start_abs = start.abs() as usize;
+                let end_abs = end.abs() as usize;
+
+                let start_cond = if start < 0 {
+                    len >= start_abs
+                } else {
+                    len > start_abs
+                };
+
+                let end_cond = if end < 0 {
+                    len >= end_abs
+                } else {
+                    len > end_abs
+                };
+
+                if start_cond && end_cond {
+                    let start_norm = if start < 0 {
+                        len - start_abs
+                    } else {
+                        start_abs
+                    };
+                    let end_norm = if end < 0 { len - end_abs } else { end_abs };
+
+                    if start > end {
+                        match inner {
+                            Value::Array(mut f) => {
+                                f.reverse();
+                                let out = f[end_norm..=start_norm].to_vec();
+
+                                Ok(Value::Array(out))
+                            }
+                            Value::String(f) => {
+                                let f = f.chars().rev().collect::<String>();
+                                let out = f[end_norm..=start_norm].to_string();
+
+                                Ok(Value::String(out))
+                            }
+                            _ => unreachable!("Checked when checked length at start"),
+                        }
+                    } else {
+                        match inner {
+                            Value::Array(f) => {
+                                let out = f[start_norm..end_norm].to_vec();
+
+                                Ok(Value::Array(out))
+                            }
+                            Value::String(f) => {
+                                let out = f[start_norm..end_norm].to_string();
+
+                                Ok(Value::String(out))
+                            }
+                            _ => unreachable!("Checked when checked length at start"),
+                        }
+                    }
+                } else {
+                    Err(Error::RangeIndexError {
+                        index: e,
+                        len,
+                        lspan: self.1,
+                        rspan: idx.1,
+                    })
+                }
+            }
             _ => Err(Error::TypeError {
-                expected: ValueType::Num.into(),
+                expected: vec![ValueType::Num, ValueType::Range],
                 got: idx,
                 context: TypeErrorCtx::Index,
             }),
