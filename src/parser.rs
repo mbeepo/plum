@@ -4,6 +4,8 @@ use crate::ast::{Expr, InfixOp, Literal, Spanned, Token};
 
 pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
+        let ident = select! { Token::Ident(ident) => ident.clone() }.labelled("identifier");
+
         let raw_expr = {
             let val = select! {
                 Token::Num(e) => Expr::from(e.parse::<f64>().unwrap()),
@@ -13,8 +15,6 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
             }
             .labelled("value")
             .map_with_span(Spanned);
-
-            let ident = select! { Token::Ident(ident) => ident.clone() }.labelled("identifier");
 
             // Array items
             let items = expr
@@ -172,49 +172,55 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .then(op.then(and).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            let assign = ident
-                .clone()
-                .chain(
-                    just(Token::Op("=".to_owned()))
-                        .ignore_then(ident)
-                        .repeated(),
-                )
-                .then(just(Token::Op("=".to_owned())).ignore_then(expr.clone()))
-                .then_ignore(just(Token::Ctrl(';')))
-                .map(|(names, val)| Expr::Assign {
-                    names,
-                    value: Box::new(val),
-                })
-                .map_with_span(Spanned);
+            let conditional = recursive(|cond| {
+                let block = expr
+                    .clone()
+                    .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')));
 
-            assign.or(or)
+                just(Token::If)
+                    .ignore_then(expr.clone())
+                    .then(block.clone())
+                    .then_ignore(just(Token::Else))
+                    .then(block.or(cond))
+                    .map(|((condition, inner), other)| {
+                        let span = condition.1.start..other.1.end;
+
+                        Spanned(
+                            Expr::Conditional {
+                                condition: Box::new(condition),
+                                inner: Box::new(inner),
+                                other: Box::new(other),
+                            },
+                            span,
+                        )
+                    })
+            });
+
+            conditional.or(or)
         };
 
-        let conditional = recursive(|cond| {
-            let block = expr
-                .clone()
-                .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')));
+        let assign = ident
+            .clone()
+            .chain(
+                just(Token::Op("=".to_owned()))
+                    .ignore_then(ident)
+                    .labelled("assign chain")
+                    .then_ignore(just(Token::Op("=".to_owned())).rewind())
+                    .repeated(),
+            )
+            .then(
+                just(Token::Op("=".to_owned()))
+                    .ignore_then(raw_expr.clone())
+                    .labelled("final assign"),
+            )
+            .then_ignore(just(Token::Ctrl(';')))
+            .map(|(names, val)| Expr::Assign {
+                names,
+                value: Box::new(val),
+            })
+            .map_with_span(Spanned);
 
-            just(Token::If)
-                .ignore_then(expr.clone())
-                .then(block.clone())
-                .then_ignore(just(Token::Else))
-                .then(block.or(cond))
-                .map(|((condition, inner), other)| {
-                    let span = condition.1.start..other.1.end;
-
-                    Spanned(
-                        Expr::Conditional {
-                            condition: Box::new(condition),
-                            inner: Box::new(inner),
-                            other: Box::new(other),
-                        },
-                        span,
-                    )
-                })
-        });
-
-        conditional.or(raw_expr)
+        assign.or(raw_expr)
     })
     .repeated()
     .at_least(1)
