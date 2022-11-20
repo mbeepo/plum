@@ -320,7 +320,7 @@ impl SpannedValue {
 
     pub fn not_equals(self, other: Self) -> Result<Value, Error> {
         let out = self.equals(other)?;
-        out.not()
+        SpannedValue::from(out).not()
     }
 
     pub fn contains(self, other: Self) -> Result<Value, Error> {
@@ -381,7 +381,7 @@ impl SpannedValue {
             }
         };
 
-        match idx.0 {
+        match idx.0.clone() {
             Value::Num(e) => {
                 if e == e.trunc() {
                     let e = e as isize;
@@ -414,7 +414,7 @@ impl SpannedValue {
                     })
                 }
             }
-            Value::Range(e) => {
+            Value::Range(e) | Value::IRange(e) => {
                 let start = e.start;
                 let end = e.end;
                 let start_abs = start.abs() as usize;
@@ -440,17 +440,35 @@ impl SpannedValue {
                     };
                     let end_norm = if end < 0 { len - end_abs } else { end_abs };
 
-                    if start > end {
+                    if start_norm > end_norm {
                         match inner {
                             Value::Array(mut f) => {
                                 f.reverse();
-                                let out = f[end_norm..=start_norm].to_vec();
+                                let start_norm = len - start_norm - 1;
+                                let end_norm = len - end_norm + 1;
+
+                                let out = f[start_norm..=end_norm].to_vec();
 
                                 Ok(Value::Array(out))
                             }
                             Value::String(f) => {
                                 let f = f.chars().rev().collect::<String>();
-                                let out = f[end_norm..=start_norm].to_string();
+                                dbg!(start, start_abs, start_norm);
+                                dbg!(end, end_abs, end_norm);
+
+                                let start_norm = len - start_norm - 1;
+                                let end_norm = if let Value::IRange(_) = idx.0 {
+                                    end_norm + 1
+                                } else {
+                                    end_norm
+                                };
+
+                                let end_norm = len - end_norm;
+
+                                dbg!(start_norm);
+                                dbg!(end_norm);
+
+                                let out = f[start_norm..=end_norm].to_string();
 
                                 Ok(Value::String(out))
                             }
@@ -459,12 +477,20 @@ impl SpannedValue {
                     } else {
                         match inner {
                             Value::Array(f) => {
-                                let out = f[start_norm..end_norm].to_vec();
+                                let out = match idx.0 {
+                                    Value::Range(_) => f[start_norm..end_norm].to_vec(),
+                                    Value::IRange(_) => f[start_norm..=end_norm].to_vec(),
+                                    _ => unreachable!("Outermost match is one of those"),
+                                };
 
                                 Ok(Value::Array(out))
                             }
                             Value::String(f) => {
-                                let out = f[start_norm..end_norm].to_string();
+                                let out = match idx.0 {
+                                    Value::Range(_) => f[start_norm..end_norm].to_string(),
+                                    Value::IRange(_) => f[start_norm..=end_norm].to_string(),
+                                    _ => unreachable!("Outermost match is one of those"),
+                                };
 
                                 Ok(Value::String(out))
                             }
@@ -531,129 +557,44 @@ impl SpannedValue {
     }
 
     pub fn irange(self, rhs: Self) -> Result<Value, Error> {
-        let rhs = rhs.add(SpannedValue(Value::Num(1.0), 0..1))?;
-        self.range(SpannedValue(rhs, 0..1))
-    }
-}
+        match self.0 {
+            Value::Num(e) => {
+                if e == e.trunc() {
+                    let e = e as isize;
 
-// these operators lose information and should not be used in most cases
-// they exist for tests of SpannedValue operators and for the `!=` operator
-impl Value {
-    pub fn pow(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
+                    match rhs.0 {
+                        Value::Num(f) => {
+                            if f == f.trunc() {
+                                let f = f as isize;
 
-        lhs.pow(rhs)
-    }
-
-    pub fn mul(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.mul(rhs)
-    }
-
-    pub fn div(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.div(rhs)
-    }
-
-    pub fn modulus(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.modulus(rhs)
-    }
-
-    pub fn add(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.add(rhs)
-    }
-
-    pub fn sub(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.sub(rhs)
-    }
-
-    pub fn lt(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.lt(rhs)
-    }
-
-    pub fn gt(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.gt(rhs)
-    }
-
-    pub fn lte(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.lte(rhs)
-    }
-
-    pub fn gte(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.gte(rhs)
-    }
-
-    pub fn and(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.and(rhs)
-    }
-
-    pub fn or(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.or(rhs)
-    }
-
-    pub fn equals(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.equals(rhs)
-    }
-
-    pub fn not_equals(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.not_equals(rhs)
-    }
-
-    pub fn contains(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.contains(rhs)
-    }
-
-    pub fn not(self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-
-        lhs.not()
-    }
-
-    pub fn index(self, other: Self) -> Result<Value, Error> {
-        let lhs = SpannedValue(self, 0..1);
-        let rhs = SpannedValue(other, 1..2);
-
-        lhs.index(rhs)
+                                Ok(Value::IRange(e..f))
+                            } else {
+                                Err(Error::TypeError {
+                                    expected: ValueType::Int.into(),
+                                    got: rhs,
+                                    context: TypeErrorCtx::Range,
+                                })
+                            }
+                        }
+                        _ => Err(Error::TypeError {
+                            expected: ValueType::Num.into(),
+                            got: rhs,
+                            context: TypeErrorCtx::Range,
+                        }),
+                    }
+                } else {
+                    Err(Error::TypeError {
+                        expected: ValueType::Int.into(),
+                        got: self,
+                        context: TypeErrorCtx::Range,
+                    })
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: ValueType::Num.into(),
+                got: self,
+                context: TypeErrorCtx::Range,
+            }),
+        }
     }
 }

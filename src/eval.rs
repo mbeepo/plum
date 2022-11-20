@@ -470,4 +470,39 @@ mod tests {
             )
         )
     }
+
+    #[test]
+    fn evaluate_range() {
+        let parsed = &parse("0..5")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(evaluated, Value::Range(0..5))
+    }
+
+    #[test]
+    fn evaluate_range_as_index() {
+        let parsed = &parse("['nice', 'cool', 'wicked', 'sick'][1..3]")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(
+            evaluated,
+            Value::Array(vec![
+                Value::String("cool".to_owned()).into(),
+                Value::String("wicked".to_owned()).into()
+            ])
+        )
+    }
+    #[test]
+    fn evaluate_irange_as_index() {
+        let parsed = &parse("['nice', 'cool', 'wicked', 'sick'][1..=2]")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(
+            evaluated,
+            Value::Array(vec![
+                Value::String("cool".to_owned()).into(),
+                Value::String("wicked".to_owned()).into()
+            ])
+        )
+    }
 }

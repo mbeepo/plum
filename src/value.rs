@@ -11,6 +11,7 @@ pub enum Value {
     Error,
     Assign(Vec<String>, Box<Value>),
     Range(Range<isize>),
+    IRange(Range<isize>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -23,6 +24,7 @@ pub enum ValueType {
     Error,
     Assign,
     Range,
+    IRange,
 }
 
 #[derive(Clone, Debug)]
@@ -52,6 +54,12 @@ impl PartialEq<SpannedValue> for Value {
     }
 }
 
+impl From<Value> for SpannedValue {
+    fn from(f: Value) -> Self {
+        Self(f, 0..1)
+    }
+}
+
 impl From<Literal> for Value {
     fn from(f: Literal) -> Self {
         match f {
@@ -74,6 +82,7 @@ impl Display for ValueType {
             ValueType::Error => "[ERROR]",
             ValueType::Assign => "Assign",
             ValueType::Range => "Range",
+            ValueType::IRange => "IRange",
         };
 
         write!(f, "{}", out)
@@ -90,6 +99,7 @@ impl Value {
             Value::Error => ValueType::Error,
             Value::Assign(_, _) => ValueType::Assign,
             Value::Range(_) => ValueType::Range,
+            Value::IRange(_) => ValueType::IRange,
         }
     }
 }

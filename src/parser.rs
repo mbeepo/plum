@@ -4,7 +4,7 @@ use crate::ast::{Expr, InfixOp, Literal, Spanned, Token};
 
 pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
-        let raw_expr = recursive(|raw_expr| {
+        let raw_expr = {
             let val = select! {
                 Token::Num(e) => Expr::from(e.parse::<f64>().unwrap()),
                 Token::String(e) => Expr::from(e),
@@ -29,28 +29,12 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .map(Expr::Literal)
                 .map_with_span(Spanned);
 
-            let assign = ident
-                .clone()
-                .chain(
-                    just(Token::Op("=".to_owned()))
-                        .ignore_then(ident)
-                        .then_ignore(just(Token::Op("=".to_owned())))
-                        .repeated(),
-                )
-                .then(just(Token::Op("=".to_owned())).ignore_then(expr.clone()))
-                .then_ignore(just(Token::Ctrl(';')))
-                .map(|(names, val)| Expr::Assign {
-                    names,
-                    value: Box::new(val),
-                })
-                .map_with_span(Spanned);
-
             let single_expr = expr
                 .clone()
                 .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
 
-            let ident = ident.map(Expr::Ident).map_with_span(Spanned);
-            let atom = choice((val, assign, ident, array, single_expr))
+            let atom_ident = ident.map(Expr::Ident).map_with_span(Spanned);
+            let atom = choice((val, atom_ident, array, single_expr))
                 .recover_with(nested_delimiters(
                     Token::Ctrl('('),
                     Token::Ctrl(')'),
@@ -188,8 +172,23 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .then(op.then(and).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            or
-        });
+            let assign = ident
+                .clone()
+                .chain(
+                    just(Token::Op("=".to_owned()))
+                        .ignore_then(ident)
+                        .repeated(),
+                )
+                .then(just(Token::Op("=".to_owned())).ignore_then(expr.clone()))
+                .then_ignore(just(Token::Ctrl(';')))
+                .map(|(names, val)| Expr::Assign {
+                    names,
+                    value: Box::new(val),
+                })
+                .map_with_span(Spanned);
+
+            assign.or(or)
+        };
 
         let conditional = recursive(|cond| {
             let block = expr
