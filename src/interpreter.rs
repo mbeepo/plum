@@ -181,7 +181,7 @@ pub fn interpret_full(
     }
 }
 
-fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
     Ok(interpret_full(input)?.0)
 }
 

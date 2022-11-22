@@ -200,6 +200,7 @@ pub enum Token {
     Num(String),
     Bool(bool),
     Null,
+    Input,
 }
 
 impl Display for Token {
@@ -214,6 +215,7 @@ impl Display for Token {
             Token::Num(e) => write!(f, "{}", e),
             Token::Bool(e) => write!(f, "{}", e),
             Token::Null => write!(f, "Null"),
+            Token::Input => write!(f, "Input"),
         }
     }
 }

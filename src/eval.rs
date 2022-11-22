@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, ops::Range};
+use std::collections::HashMap;
 
 use crate::{
     ast::{Expr, InfixOp, Literal, Spanned},
@@ -192,7 +192,7 @@ pub fn eval<T: AsRef<Spanned>>(
                 inner,
                 other,
             },
-            span,
+            _,
         ) => {
             let evaluated = eval(condition, vars.clone())?;
 
@@ -227,12 +227,7 @@ mod tests {
 
     use chumsky::{Parser, Stream};
 
-    use crate::{
-        ast::Spanned,
-        error::{ChumskyAriadne, Error},
-        lexer::lexer,
-        parser,
-    };
+    use crate::{ast::Spanned, error::Error, lexer::lexer, parser};
 
     use super::{SpannedValue, Value};
 
@@ -504,5 +499,21 @@ mod tests {
                 Value::String("wicked".to_owned()).into()
             ])
         )
+    }
+
+    #[test]
+    fn evaluate_backwards_range_as_index() {
+        let parsed = &parse("'wonderful'[-1..4]")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(evaluated, Value::String("lufr".to_owned()));
+    }
+
+    #[test]
+    fn evaluate_backwards_irange_as_index() {
+        let parsed = &parse("'sickening'[-4..=3]")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(evaluated, Value::String("nek".to_owned()));
     }
 }

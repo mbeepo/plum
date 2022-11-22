@@ -5,3 +5,4 @@ epic = nice[cool];
 sick = nice[-9..2];
 wicked = nice[-1..=5];
 gnarly = nice[-1..=0];
+salad = nice[8..7];

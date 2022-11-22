@@ -453,22 +453,20 @@ impl SpannedValue {
                             }
                             Value::String(f) => {
                                 let f = f.chars().rev().collect::<String>();
-                                dbg!(start, start_abs, start_norm);
-                                dbg!(end, end_abs, end_norm);
-
                                 let start_norm = len - start_norm - 1;
-                                let end_norm = if let Value::IRange(_) = idx.0 {
-                                    end_norm + 1
+
+                                dbg!(&idx);
+                                dbg!(self, start_norm, end_norm);
+
+                                let out = if let Value::IRange(_) = idx.0 {
+                                    let end_norm = len - (end_norm + 1);
+
+                                    f[start_norm..=end_norm].to_string()
                                 } else {
-                                    end_norm
+                                    let end_norm = len - end_norm - 1;
+
+                                    f[start_norm..end_norm].to_string()
                                 };
-
-                                let end_norm = len - end_norm;
-
-                                dbg!(start_norm);
-                                dbg!(end_norm);
-
-                                let out = f[start_norm..=end_norm].to_string();
 
                                 Ok(Value::String(out))
                             }

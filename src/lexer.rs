@@ -84,7 +84,11 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         _ => Token::Ident(ident),
     });
 
-    let token = choice((num, string, op, ctrl, ident)).recover_with(skip_then_retry_until([]));
+    // input variable
+    let input = just("input").to(Token::Input);
+
+    let token =
+        choice((input, num, string, op, ctrl, ident)).recover_with(skip_then_retry_until([]));
 
     let comment = just("//").then(take_until(just('\n'))).padded();
 
@@ -205,6 +209,19 @@ mod tests {
                 (Token::Ctrl('{'), 22..23),
                 (Token::Ident("bad".to_owned()), 24..27),
                 (Token::Ctrl('}'), 28..29)
+            ]
+        )
+    }
+
+    #[test]
+    fn lex_input() {
+        let lexed = lexer().parse("input cool").unwrap();
+
+        assert_eq!(
+            lexed,
+            vec![
+                (Token::Input, 0..5),
+                (Token::Ident("cool".to_owned()), 6..10)
             ]
         )
     }
