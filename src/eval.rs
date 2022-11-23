@@ -217,6 +217,7 @@ pub fn eval<T: AsRef<Spanned>>(
                 }
             }
         }
+        Spanned(Expr::Input(_, kind), span) => Ok(SpannedValue(Value::Input(*kind), span.clone())),
         _ => todo!(),
     }
 }

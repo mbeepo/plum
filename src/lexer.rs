@@ -69,7 +69,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .map(Token::Op);
 
     // control characters
-    let ctrl = one_of("()[]{};,").map(|c| Token::Ctrl(c));
+    let ctrl = one_of("()[]{};:,").map(|c| Token::Ctrl(c));
 
     // identifiers
     let ident = text::ident().map(|ident: String| match ident.as_str() {
@@ -87,8 +87,19 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     // input variable
     let input = just("input").to(Token::Input);
 
+    // type names
+    let kind = choice::<_, Simple<char>>((
+        just("Num"),
+        just("Int"),
+        just("String"),
+        just("Bool"),
+        just("Array"),
+        just("Any"),
+    ))
+    .map(|name: &str| Token::Type(name.to_owned()));
+
     let token =
-        choice((input, num, string, op, ctrl, ident)).recover_with(skip_then_retry_until([]));
+        choice((num, kind, input, string, op, ctrl, ident)).recover_with(skip_then_retry_until([]));
 
     let comment = just("//").then(take_until(just('\n'))).padded();
 
@@ -224,5 +235,20 @@ mod tests {
                 (Token::Ident("cool".to_owned()), 6..10)
             ]
         )
+    }
+
+    #[test]
+    fn lex_typed() {
+        let lexed = lexer().parse("input cool: Bool").unwrap();
+
+        assert_eq!(
+            lexed,
+            vec![
+                (Token::Input, 0..5),
+                (Token::Ident("cool".to_owned()), 6..10),
+                (Token::Ctrl(':'), 10..11),
+                (Token::Type("Bool".to_owned()), 12..16)
+            ]
+        );
     }
 }

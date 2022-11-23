@@ -140,6 +140,7 @@ pub fn interpret_full(
     }
 
     let mut exprs: HashMap<String, Spanned> = HashMap::new();
+    let mut inputs: Vec<Expr> = Vec::new(); // should only be Expr::Input
 
     // gather the variable assignments without evaluating them
     for expr in parsed.iter() {
@@ -148,6 +149,9 @@ pub fn interpret_full(
                 for name in names {
                     exprs.insert(name.clone(), *value.clone());
                 }
+            }
+            Spanned(Expr::Input(_, _), _) => {
+                inputs.push(expr.clone().0);
             }
             _ => {}
         }

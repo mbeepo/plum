@@ -1,6 +1,9 @@
 use chumsky::prelude::*;
 
-use crate::ast::{Expr, InfixOp, Literal, Spanned, Token};
+use crate::{
+    ast::{Expr, InfixOp, Literal, Spanned, Token},
+    value::ValueType,
+};
 
 pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
@@ -220,7 +223,31 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
             })
             .map_with_span(Spanned);
 
-        assign.or(raw_expr)
+        let input = just(Token::Input)
+            .ignore_then(ident.clone())
+            .then(
+                just(Token::Ctrl(':'))
+                    .ignore_then(select! {
+                        Token::Type(e) => match e.as_str() {
+                            "Num" => ValueType::Num,
+                            "Int" => ValueType::Int,
+                            "String" => ValueType::String,
+                            "Bool" => ValueType::Bool,
+                            "Array" => ValueType::Array,
+                            "Any" => ValueType::Any,
+                            &_ => unreachable!("Type token won't be made for other strings"),
+                        },
+                    })
+                    .or_not(),
+            )
+            .then_ignore(just(Token::Ctrl(';')))
+            .map(|(name, kind)| match kind {
+                Some(kind) => Expr::Input(name, kind),
+                None => Expr::Input(name, ValueType::Any),
+            })
+            .map_with_span(Spanned);
+
+        input.or(assign).or(raw_expr)
     })
     .repeated()
     .at_least(1)
@@ -241,6 +268,7 @@ mod tests {
         ast::{Expr, InfixOp, Literal, Spanned},
         lexer::lexer,
         parser,
+        value::ValueType,
     };
 
     fn parse(input: &str) -> Vec<Spanned> {
@@ -638,5 +666,19 @@ mod tests {
                 Box::new(Spanned::from(10.0))
             )
         )
+    }
+
+    #[test]
+    fn parse_typed_input() {
+        let parsed = parse("input cool: Bool;");
+
+        assert_eq!(parsed[0], Expr::Input("cool".to_string(), ValueType::Bool))
+    }
+
+    #[test]
+    fn parse_untyped_input() {
+        let parsed = parse("input nice;");
+
+        assert_eq!(parsed[0], Expr::Input("nice".to_string(), ValueType::Any))
     }
 }

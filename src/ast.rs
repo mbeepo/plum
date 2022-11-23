@@ -1,6 +1,8 @@
 use std::fmt::{self, Display};
 use std::ops::Range;
 
+use crate::value::ValueType;
+
 pub type Span = Range<usize>;
 
 #[derive(Clone, Debug)]
@@ -151,6 +153,7 @@ pub enum Expr {
         value: Box<Spanned>,
     },
     Error,
+    Input(String, ValueType),
 }
 
 impl From<f64> for Expr {
@@ -201,6 +204,7 @@ pub enum Token {
     Bool(bool),
     Null,
     Input,
+    Type(String),
 }
 
 impl Display for Token {
@@ -216,6 +220,7 @@ impl Display for Token {
             Token::Bool(e) => write!(f, "{}", e),
             Token::Null => write!(f, "Null"),
             Token::Input => write!(f, "Input"),
+            Token::Type(_) => write!(f, "TypeName"),
         }
     }
 }

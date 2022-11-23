@@ -12,9 +12,10 @@ pub enum Value {
     Assign(Vec<String>, Box<Value>),
     Range(Range<isize>),
     IRange(Range<isize>),
+    Input(ValueType),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueType {
     Num,
     Int,
@@ -25,6 +26,8 @@ pub enum ValueType {
     Assign,
     Range,
     IRange,
+    Input,
+    Any,
 }
 
 #[derive(Clone, Debug)]
@@ -83,6 +86,8 @@ impl Display for ValueType {
             ValueType::Assign => "Assign",
             ValueType::Range => "Range",
             ValueType::IRange => "IRange",
+            ValueType::Input => "Input",
+            ValueType::Any => "Any",
         };
 
         write!(f, "{}", out)
@@ -100,6 +105,7 @@ impl Value {
             Value::Assign(_, _) => ValueType::Assign,
             Value::Range(_) => ValueType::Range,
             Value::IRange(_) => ValueType::IRange,
+            Value::Input(_) => ValueType::Input,
         }
     }
 }
