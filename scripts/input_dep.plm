@@ -1,0 +1,7 @@
+input cool: Bool;
+
+nice = if cool {
+    30
+} else {
+    20
+};

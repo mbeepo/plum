@@ -9,7 +9,7 @@ use crate::{
 pub fn eval<T: AsRef<Spanned>>(
     input: T,
     vars: HashMap<String, Value>,
-) -> Result<SpannedValue, Vec<Error>> {
+) -> Result<(SpannedValue, Vec<String>), Vec<Error>> {
     let input = input.as_ref();
     let mut errors: Vec<Error> = Vec::new();
 
@@ -17,6 +17,7 @@ pub fn eval<T: AsRef<Spanned>>(
         Spanned(Expr::Literal(literal), span) => match literal {
             Literal::Array(e) => {
                 let mut errored = false;
+                let mut inputs: Vec<String> = Vec::new();
 
                 let new = e
                     .iter()
@@ -24,7 +25,10 @@ pub fn eval<T: AsRef<Spanned>>(
                         let evaluated = eval(f.clone(), vars.clone());
 
                         match evaluated {
-                            Ok(e) => e,
+                            Ok(e) => {
+                                inputs.extend(e.1);
+                                e.0
+                            }
                             Err(e) => {
                                 errors.extend(e);
                                 errored = true;
@@ -38,10 +42,13 @@ pub fn eval<T: AsRef<Spanned>>(
                 if errored {
                     Err(errors)
                 } else {
-                    Ok(SpannedValue(Value::Array(new), span.clone()))
+                    Ok((SpannedValue(Value::Array(new), span.clone()), inputs))
                 }
             }
-            _ => Ok(SpannedValue(Value::from(literal.clone()), span.clone())),
+            _ => Ok((
+                SpannedValue(Value::from(literal.clone()), span.clone()),
+                Vec::new(),
+            )),
         },
         Spanned(Expr::Assign { names, value }, span) => {
             let evaluated = eval(value, vars);
@@ -204,6 +211,7 @@ pub fn eval<T: AsRef<Spanned>>(
                         eval(other, vars)
                     }
                 }
+                SpannedValue(Value::Input(name, ValueType::Bool), _) => eval(inner, vars),
                 _ => {
                     let err = Error::TypeError {
                         expected: ValueType::Bool.into(),
@@ -217,7 +225,10 @@ pub fn eval<T: AsRef<Spanned>>(
                 }
             }
         }
-        Spanned(Expr::Input(_, kind), span) => Ok(SpannedValue(Value::Input(*kind), span.clone())),
+        Spanned(Expr::Input(name, kind), span) => Ok(SpannedValue(
+            Value::Input(name.clone(), *kind),
+            span.clone(),
+        )),
         _ => todo!(),
     }
 }
@@ -228,7 +239,7 @@ mod tests {
 
     use chumsky::{Parser, Stream};
 
-    use crate::{ast::Spanned, error::Error, lexer::lexer, parser};
+    use crate::{ast::Spanned, error::Error, lexer::lexer, parser, value::ValueType};
 
     use super::{SpannedValue, Value};
 
@@ -516,5 +527,33 @@ mod tests {
         let evaluated = evaluate(parsed).unwrap();
 
         assert_eq!(evaluated, Value::String("nek".to_owned()));
+    }
+
+    #[test]
+    fn evaluate_input() {
+        let parsed = &parse("input cool;")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(
+            evaluated,
+            Value::Assign(
+                vec!["cool".to_owned()],
+                Box::new(Value::Input(ValueType::Any))
+            )
+        )
+    }
+
+    #[test]
+    fn evaluate_typed_input() {
+        let parsed = &parse("input cool: Bool;")[0];
+        let evaluated = evaluate(parsed).unwrap();
+
+        assert_eq!(
+            evaluated,
+            Value::Assign(
+                vec!["cool".to_owned()],
+                Box::new(Value::Input(ValueType::Bool))
+            )
+        )
     }
 }

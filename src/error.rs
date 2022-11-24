@@ -162,6 +162,7 @@ impl ChumskyAriadne for Error {
                     }
                     e => {
                         println!("{:#?}", e);
+                        dbg!(self);
                         todo!()
                     }
                 }

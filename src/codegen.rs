@@ -132,6 +132,9 @@ impl From<&Spanned> for String {
 
                 "if ".to_owned() + &cond_str + " { " + &inner_str + " } else " + &other_str + " }"
             }
+            Spanned(Expr::Input(name, kind), _) => {
+                "input ".to_owned() + name + ": " + &kind.to_string() + ";"
+            }
             _ => todo!(),
         }
     }

@@ -90,6 +90,20 @@ pub fn interpret_full(
                     }
                 }
             }
+            Spanned(Expr::Input(name, _), span) => {
+                if let Some(old_span) = spans.get(name) {
+                    let err = Error::ReassignError {
+                        name: name.to_string(),
+                        old_span: old_span.clone(),
+                        new_span: span.clone(),
+                    };
+                    errs.push(err);
+                } else {
+                    spans.insert(name.clone(), span.clone());
+                    deps.insert(name.to_owned(), (Vec::new(), span.clone()));
+                    out_deps.insert(name.to_owned(), Vec::new());
+                }
+            }
             _ => {}
         }
     }
@@ -139,8 +153,9 @@ pub fn interpret_full(
         }
     }
 
+    dbg!(&order);
+
     let mut exprs: HashMap<String, Spanned> = HashMap::new();
-    let mut inputs: Vec<Expr> = Vec::new(); // should only be Expr::Input
 
     // gather the variable assignments without evaluating them
     for expr in parsed.iter() {
@@ -150,8 +165,8 @@ pub fn interpret_full(
                     exprs.insert(name.clone(), *value.clone());
                 }
             }
-            Spanned(Expr::Input(_, _), _) => {
-                inputs.push(expr.clone().0);
+            Spanned(Expr::Input(name, _), _) => {
+                exprs.insert(name.clone(), expr.clone());
             }
             _ => {}
         }

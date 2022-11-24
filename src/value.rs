@@ -12,7 +12,7 @@ pub enum Value {
     Assign(Vec<String>, Box<Value>),
     Range(Range<isize>),
     IRange(Range<isize>),
-    Input(ValueType),
+    Input(String, ValueType),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,7 +105,7 @@ impl Value {
             Value::Assign(_, _) => ValueType::Assign,
             Value::Range(_) => ValueType::Range,
             Value::IRange(_) => ValueType::IRange,
-            Value::Input(_) => ValueType::Input,
+            Value::Input(_, _) => ValueType::Input,
         }
     }
 }
