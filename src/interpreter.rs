@@ -185,7 +185,7 @@ pub fn interpret_full(
 
         match evaluated {
             Ok(e) => {
-                vars.insert(name, e.0);
+                vars.insert(name, (e.0).0);
             }
             Err(e) => {
                 errs.extend(e);

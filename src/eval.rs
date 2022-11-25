@@ -54,9 +54,12 @@ pub fn eval<T: AsRef<Spanned>>(
             let evaluated = eval(value, vars);
 
             match evaluated {
-                Ok(spanned) => Ok(SpannedValue(
-                    Value::Assign(names.clone(), Box::new(spanned.0)),
-                    span.clone(),
+                Ok((spanned, inputs)) => Ok((
+                    SpannedValue(
+                        Value::Assign(names.clone(), Box::new(spanned.0)),
+                        span.clone(),
+                    ),
+                    inputs,
                 )),
                 Err(error) => {
                     errors.extend(error);
@@ -66,6 +69,8 @@ pub fn eval<T: AsRef<Spanned>>(
             }
         }
         Spanned(Expr::InfixOp(lhs, op, rhs), span) => {
+            let mut inputs: Vec<String> = Vec::new();
+
             let lhs = eval(lhs, vars.clone());
             let lhs = match lhs {
                 Err(e) => {
@@ -73,7 +78,10 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     SpannedValue(Value::Error, 0..1)
                 }
-                Ok(e) => e.clone(),
+                Ok(e) => {
+                    inputs.extend(e.1);
+                    e.0.clone()
+                }
             };
 
             let rhs = eval(rhs, vars);
@@ -83,7 +91,10 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     SpannedValue(Value::Error, 0..1)
                 }
-                Ok(e) => e.clone(),
+                Ok(e) => {
+                    inputs.extend(e.1);
+                    e.0.clone()
+                }
             };
 
             if lhs == Value::Error || rhs == Value::Error {
@@ -116,10 +127,12 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     Err(errors)
                 }
-                Ok(e) => Ok(SpannedValue(e, span.clone())),
+                Ok(e) => Ok((SpannedValue(e, span.clone()), inputs)),
             }
         }
         Spanned(Expr::Not(rhs), span) => {
+            let mut inputs: Vec<String> = Vec::new();
+
             let rhs = eval(rhs, vars);
             let rhs = match rhs {
                 Err(e) => {
@@ -127,7 +140,10 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     return Err(errors);
                 }
-                Ok(e) => e.clone(),
+                Ok(e) => {
+                    inputs.extend(e.1);
+                    e.0.clone()
+                }
             };
 
             let output = rhs.not();
@@ -138,10 +154,12 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     Err(errors)
                 }
-                Ok(e) => Ok(SpannedValue(e, span.clone())),
+                Ok(e) => Ok((SpannedValue(e, span.clone()), inputs)),
             }
         }
         Spanned(Expr::Index(lhs, rhs), span) => {
+            let mut inputs: Vec<String> = Vec::new();
+
             let lhs = eval(lhs, vars.clone());
             let lhs = match lhs {
                 Err(e) => {
@@ -149,7 +167,10 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     SpannedValue(Value::Error, 0..1)
                 }
-                Ok(e) => e.clone(),
+                Ok(e) => {
+                    inputs.extend(e.1);
+                    e.0.clone()
+                }
             };
 
             let rhs = eval(rhs, vars);
@@ -159,7 +180,10 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     SpannedValue(Value::Error, 0..1)
                 }
-                Ok(e) => e.clone(),
+                Ok(e) => {
+                    inputs.extend(e.1);
+                    e.0.clone()
+                }
             };
 
             if lhs == Value::Error || rhs == Value::Error {
@@ -174,14 +198,14 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     Err(errors)
                 }
-                Ok(e) => Ok(SpannedValue(e, span.clone())),
+                Ok(e) => Ok((SpannedValue(e, span.clone()), inputs)),
             }
         }
         Spanned(Expr::Ident(name), span) => {
             let out = vars.get(name);
 
             match out {
-                Some(out) => Ok(SpannedValue(out.clone(), span.clone())),
+                Some(out) => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
                 None => {
                     let err = Error::ReferenceError {
                         name: name.clone(),
@@ -202,28 +226,31 @@ pub fn eval<T: AsRef<Spanned>>(
             _,
         ) => {
             let evaluated = eval(condition, vars.clone())?;
+            let mut inputs: Vec<String> = Vec::new();
 
-            match evaluated {
-                SpannedValue(Value::Bool(enter), _) => {
+            let out = match evaluated {
+                (SpannedValue(Value::Bool(enter), _), inputs) => {
                     if enter {
                         eval(inner, vars)
                     } else {
                         eval(other, vars)
                     }
                 }
-                SpannedValue(Value::Input(name, ValueType::Bool), _) => eval(inner, vars),
+                (SpannedValue(Value::Input(name, ValueType::Bool), _), inputs) => eval(inner, vars),
                 _ => {
                     let err = Error::TypeError {
                         expected: ValueType::Bool.into(),
-                        got: evaluated,
+                        got: evaluated.0,
                         context: TypeErrorCtx::Condition,
                     };
 
                     errors.push(err);
 
-                    Err(errors)
+                    return Err(errors);
                 }
-            }
+            };
+
+            evaluated
         }
         Spanned(Expr::Input(name, kind), span) => Ok(SpannedValue(
             Value::Input(name.clone(), *kind),
@@ -534,13 +561,7 @@ mod tests {
         let parsed = &parse("input cool;")[0];
         let evaluated = evaluate(parsed).unwrap();
 
-        assert_eq!(
-            evaluated,
-            Value::Assign(
-                vec!["cool".to_owned()],
-                Box::new(Value::Input(ValueType::Any))
-            )
-        )
+        assert_eq!(evaluated, Value::Input("cool".to_owned(), ValueType::Any))
     }
 
     #[test]
@@ -548,12 +569,6 @@ mod tests {
         let parsed = &parse("input cool: Bool;")[0];
         let evaluated = evaluate(parsed).unwrap();
 
-        assert_eq!(
-            evaluated,
-            Value::Assign(
-                vec!["cool".to_owned()],
-                Box::new(Value::Input(ValueType::Bool))
-            )
-        )
+        assert_eq!(evaluated, Value::Input("cool".to_owned(), ValueType::Bool))
     }
 }
