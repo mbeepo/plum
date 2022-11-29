@@ -92,6 +92,15 @@ pub fn eval<T: AsRef<Spanned>>(
 
                     SpannedValue(Value::Error, 0..1)
                 }
+                Ok((SpannedValue(Value::Input(name, kind, value), _), inputs_out)) => {
+                    match *value {
+                        Value::None => Ok((
+                            SpannedValue(Value::None, span.clone()),
+                            vec![(name.clone(), kind)],
+                        )),
+                        _ => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+                    }
+                }
                 Ok(e) => {
                     inputs.extend(e.1);
                     e.0.clone()
@@ -203,7 +212,16 @@ pub fn eval<T: AsRef<Spanned>>(
             }
         }
         Spanned(Expr::Ident(name), span) => match vars.get(name) {
-            Some(out) => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+            Some(out) => match out {
+                Value::Input(name, kind, value) => match **value {
+                    Value::None => Ok((
+                        SpannedValue(Value::None, span.clone()),
+                        vec![(name.clone(), *kind)],
+                    )),
+                    _ => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+                },
+                _ => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+            },
             None => {
                 let err = Error::ReferenceError {
                     name: name.clone(),

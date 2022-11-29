@@ -1,7 +1,11 @@
-input cool: Bool;
+// input cool: Bool;
+input good;
+input bad;
+
+cool = true;
 
 nice = if cool {
-    30
+    good
 } else {
-    20
+    bad
 };
