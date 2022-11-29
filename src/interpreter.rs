@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     eval::eval,
     lexer, parser,
-    value::Value,
+    value::{Value, ValueType},
 };
 
 #[derive(Clone, Debug)]
@@ -34,16 +34,16 @@ impl From<String> for SpannedIdent {
 }
 
 pub fn interpret_full(
-    input: impl Into<String>,
+    input: String,
 ) -> Result<
     (
         HashMap<String, Value>,       // values
         HashMap<String, Vec<String>>, // dependencies
         HashMap<String, String>,      // generated source
+        Vec<(String, ValueType)>,     // missing inputs
     ),
     Vec<Error>,
 > {
-    let input = input.into();
     let len = input.len();
 
     let (lexed, errs) = lexer::lexer().parse_recovery(input);
@@ -174,6 +174,7 @@ pub fn interpret_full(
 
     let mut vars: HashMap<String, Value> = HashMap::new();
     let mut source: HashMap<String, String> = HashMap::new();
+    let mut inputs: Vec<(String, ValueType)> = Vec::new();
 
     // finally, evaluate the variables
     for SpannedIdent { name, span: _ } in order {
@@ -184,8 +185,9 @@ pub fn interpret_full(
         source.insert(name.clone(), expr_source);
 
         match evaluated {
-            Ok(e) => {
-                vars.insert(name, (e.0).0);
+            Ok((value, inputs_out)) => {
+                inputs.extend(inputs_out);
+                vars.insert(name, value.0);
             }
             Err(e) => {
                 errs.extend(e);
@@ -196,11 +198,11 @@ pub fn interpret_full(
     if errs.len() > 0 {
         Err(errs)
     } else {
-        Ok((vars, out_deps, source))
+        Ok((vars, out_deps, source, inputs))
     }
 }
 
-pub fn interpret(input: impl Into<String>) -> Result<HashMap<String, Value>, Vec<Error>> {
+pub fn interpret(input: String) -> Result<HashMap<String, Value>, Vec<Error>> {
     Ok(interpret_full(input)?.0)
 }
 
@@ -243,6 +245,38 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
     }
 
     deps
+}
+
+pub fn get_inputs(input: String) -> Result<Vec<(String, ValueType)>, Vec<Error>> {
+    let len = input.len();
+
+    let (lexed, errs) = lexer::lexer().parse_recovery(input);
+
+    if errs.len() > 0 {
+        return Err(errs.iter().map(|e| Error::SyntaxError(e.clone())).collect());
+    }
+
+    let (parsed, errs) =
+        parser::parse().parse_recovery(Stream::from_iter(len..len + 1, lexed.unwrap().into_iter()));
+
+    if errs.len() > 0 {
+        return Err(errs
+            .iter()
+            .map(|e| Error::ParsingError(e.clone()))
+            .collect());
+    }
+
+    let parsed = parsed.unwrap();
+    let mut inputs: Vec<(String, ValueType)> = Vec::new();
+
+    for item in parsed {
+        match item {
+            Spanned(Expr::Input(name, kind), _) => inputs.push((name, kind)),
+            _ => {}
+        }
+    }
+
+    Ok(inputs)
 }
 
 fn gather_deps_errors(
@@ -289,7 +323,7 @@ mod tests {
 
     #[test]
     fn interpret_assign_chain() {
-        let interpreted = interpret("these = are = all = 12;").unwrap();
+        let interpreted = interpret("these = are = all = 12;".to_owned()).unwrap();
         let value = Value::Num(12.0);
 
         assert_eq!(interpreted.get("these").unwrap(), &value);

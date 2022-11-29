@@ -6,10 +6,11 @@ use crate::{
     value::{SpannedValue, Value, ValueType},
 };
 
+// returns either output and missing inputs, or an error
 pub fn eval<T: AsRef<Spanned>>(
     input: T,
     vars: HashMap<String, Value>,
-) -> Result<(SpannedValue, Vec<String>), Vec<Error>> {
+) -> Result<(SpannedValue, Vec<(String, ValueType)>), Vec<Error>> {
     let input = input.as_ref();
     let mut errors: Vec<Error> = Vec::new();
 
@@ -17,7 +18,7 @@ pub fn eval<T: AsRef<Spanned>>(
         Spanned(Expr::Literal(literal), span) => match literal {
             Literal::Array(e) => {
                 let mut errored = false;
-                let mut inputs: Vec<String> = Vec::new();
+                let mut inputs = Vec::new();
 
                 let new = e
                     .iter()
@@ -69,7 +70,7 @@ pub fn eval<T: AsRef<Spanned>>(
             }
         }
         Spanned(Expr::InfixOp(lhs, op, rhs), span) => {
-            let mut inputs: Vec<String> = Vec::new();
+            let mut inputs = Vec::new();
 
             let lhs = eval(lhs, vars.clone());
             let lhs = match lhs {
@@ -131,7 +132,7 @@ pub fn eval<T: AsRef<Spanned>>(
             }
         }
         Spanned(Expr::Not(rhs), span) => {
-            let mut inputs: Vec<String> = Vec::new();
+            let mut inputs = Vec::new();
 
             let rhs = eval(rhs, vars);
             let rhs = match rhs {
@@ -158,7 +159,7 @@ pub fn eval<T: AsRef<Spanned>>(
             }
         }
         Spanned(Expr::Index(lhs, rhs), span) => {
-            let mut inputs: Vec<String> = Vec::new();
+            let mut inputs = Vec::new();
 
             let lhs = eval(lhs, vars.clone());
             let lhs = match lhs {
@@ -201,42 +202,60 @@ pub fn eval<T: AsRef<Spanned>>(
                 Ok(e) => Ok((SpannedValue(e, span.clone()), inputs)),
             }
         }
-        Spanned(Expr::Ident(name), span) => {
-            let out = vars.get(name);
+        Spanned(Expr::Ident(name), span) => match vars.get(name) {
+            Some(out) => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+            None => {
+                let err = Error::ReferenceError {
+                    name: name.clone(),
+                    span: span.clone(),
+                };
+                errors.push(err);
 
-            match out {
-                Some(out) => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
-                None => {
-                    let err = Error::ReferenceError {
-                        name: name.clone(),
-                        span: span.clone(),
-                    };
-                    errors.push(err);
-
-                    Err(errors)
-                }
+                Err(errors)
             }
-        }
+        },
         Spanned(
             Expr::Conditional {
                 condition,
                 inner,
                 other,
             },
-            _,
+            span,
         ) => {
             let evaluated = eval(condition, vars.clone())?;
-            let mut inputs: Vec<String> = Vec::new();
 
-            let out = match evaluated {
-                (SpannedValue(Value::Bool(enter), _), inputs) => {
+            let out = match evaluated.0.clone() {
+                SpannedValue(Value::Bool(enter), _) => {
                     if enter {
                         eval(inner, vars)
                     } else {
                         eval(other, vars)
                     }
                 }
-                (SpannedValue(Value::Input(name, ValueType::Bool), _), inputs) => eval(inner, vars),
+                SpannedValue(Value::Input(name, ValueType::Bool, value), _) => match *value {
+                    Value::Bool(enter) => {
+                        if enter {
+                            eval(inner, vars)
+                        } else {
+                            eval(other, vars)
+                        }
+                    }
+                    Value::None => Ok((
+                        SpannedValue(Value::None, span.clone()),
+                        vec![(name, ValueType::Bool)],
+                    )),
+                    _ => {
+                        let err = Error::TypeError {
+                            expected: ValueType::Bool.into(),
+                            got: evaluated.0,
+                            context: TypeErrorCtx::Condition,
+                        };
+
+                        errors.push(err);
+
+                        return Err(errors);
+                    }
+                },
                 _ => {
                     let err = Error::TypeError {
                         expected: ValueType::Bool.into(),
@@ -250,11 +269,14 @@ pub fn eval<T: AsRef<Spanned>>(
                 }
             };
 
-            evaluated
+            out
         }
-        Spanned(Expr::Input(name, kind), span) => Ok(SpannedValue(
-            Value::Input(name.clone(), *kind),
-            span.clone(),
+        Spanned(Expr::Input(name, kind), span) => Ok((
+            SpannedValue(
+                Value::Input(name.clone(), *kind, Box::new(Value::None)),
+                span.clone(),
+            ),
+            Vec::new(),
         )),
         _ => todo!(),
     }
@@ -280,7 +302,7 @@ mod tests {
     }
 
     fn evaluate<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>> {
-        super::eval(input, HashMap::new())
+        super::eval(input, HashMap::new()).map(|r| r.0)
     }
 
     #[test]
@@ -483,7 +505,7 @@ mod tests {
             }
         }
 
-        let evaluated2 = super::eval(&parsed[1], vars).unwrap();
+        let evaluated2 = super::eval(&parsed[1], vars).map(|r| r.0).unwrap();
 
         assert_eq!(
             evaluated2,
@@ -561,7 +583,10 @@ mod tests {
         let parsed = &parse("input cool;")[0];
         let evaluated = evaluate(parsed).unwrap();
 
-        assert_eq!(evaluated, Value::Input("cool".to_owned(), ValueType::Any))
+        assert_eq!(
+            evaluated,
+            Value::Input("cool".to_owned(), ValueType::Any, Box::new(Value::None))
+        )
     }
 
     #[test]
@@ -569,6 +594,9 @@ mod tests {
         let parsed = &parse("input cool: Bool;")[0];
         let evaluated = evaluate(parsed).unwrap();
 
-        assert_eq!(evaluated, Value::Input("cool".to_owned(), ValueType::Bool))
+        assert_eq!(
+            evaluated,
+            Value::Input("cool".to_owned(), ValueType::Bool, Box::new(Value::None))
+        )
     }
 }

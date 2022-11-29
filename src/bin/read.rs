@@ -6,7 +6,7 @@ fn main() {
     let path = &env::args().collect::<Vec<String>>()[1];
     let file = std::fs::read(path).unwrap();
     let source = String::from_utf8(file).unwrap();
-    let evaluated = interpret_full(&source);
+    let evaluated = interpret_full(source.clone());
 
     match evaluated {
         Err(errs) => {
