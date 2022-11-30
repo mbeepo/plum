@@ -1,8 +1,6 @@
-// input cool: Bool;
+input cool: Bool;
 input good;
 input bad;
-
-cool = true;
 
 nice = if cool {
     good

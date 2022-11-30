@@ -1,26 +1,5 @@
 use crate::ast::{Expr, InfixOp, Literal, Spanned};
 
-impl InfixOp {
-    fn get_binding_power(&self) -> u8 {
-        match self {
-            InfixOp::IRange => 68,
-            InfixOp::Range => 66,
-            InfixOp::Pow => 64,
-            InfixOp::Mul | InfixOp::Div | InfixOp::Mod => 62,
-            InfixOp::Add | InfixOp::Sub => 60,
-            InfixOp::Equals
-            | InfixOp::NotEquals
-            | InfixOp::Lt
-            | InfixOp::Gt
-            | InfixOp::Lte
-            | InfixOp::Gte => 58,
-            InfixOp::In => 56,
-            InfixOp::And => 54,
-            InfixOp::Or => 52,
-        }
-    }
-}
-
 impl From<InfixOp> for String {
     fn from(f: InfixOp) -> Self {
         match f {

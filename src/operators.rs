@@ -455,9 +455,6 @@ impl SpannedValue {
                                 let f = f.chars().rev().collect::<String>();
                                 let start_norm = len - start_norm - 1;
 
-                                dbg!(&idx);
-                                dbg!(self, start_norm, end_norm);
-
                                 let out = if let Value::IRange(_) = idx.0 {
                                     let end_norm = len - (end_norm + 1);
 

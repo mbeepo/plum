@@ -33,17 +33,20 @@ impl From<String> for SpannedIdent {
     }
 }
 
-pub fn interpret_full(
-    input: String,
-) -> Result<
-    (
-        HashMap<String, Value>,       // values
-        HashMap<String, Vec<String>>, // dependencies
-        HashMap<String, String>,      // generated source
-        Vec<(String, ValueType)>,     // missing inputs
-    ),
-    Vec<Error>,
-> {
+#[derive(Clone, Debug)]
+pub struct FullOutput {
+    pub output: Output,
+    pub deps: HashMap<String, Vec<String>>,
+    pub source: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Output {
+    pub values: HashMap<String, Value>,
+    pub inputs: Vec<(String, ValueType)>,
+}
+
+pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
     let len = input.len();
 
     let (lexed, errs) = lexer::lexer().parse_recovery(input);
@@ -153,8 +156,6 @@ pub fn interpret_full(
         }
     }
 
-    dbg!(&order);
-
     let mut exprs: HashMap<String, Spanned> = HashMap::new();
 
     // gather the variable assignments without evaluating them
@@ -198,12 +199,25 @@ pub fn interpret_full(
     if errs.len() > 0 {
         Err(errs)
     } else {
-        Ok((vars, out_deps, source, inputs))
+        Ok(FullOutput {
+            output: Output {
+                values: vars,
+                inputs,
+            },
+            deps: out_deps,
+            source,
+        })
     }
 }
 
-pub fn interpret(input: String) -> Result<HashMap<String, Value>, Vec<Error>> {
-    Ok(interpret_full(input)?.0)
+pub fn interpret(input: &str) -> Result<Output, Vec<Error>> {
+    let FullOutput {
+        output,
+        deps: _,
+        source: _,
+    } = interpret_full(input)?;
+
+    Ok(output)
 }
 
 fn get_deps(expr: &Spanned) -> Vec<String> {
@@ -247,7 +261,7 @@ fn get_deps(expr: &Spanned) -> Vec<String> {
     deps
 }
 
-pub fn get_inputs(input: String) -> Result<Vec<(String, ValueType)>, Vec<Error>> {
+pub fn get_inputs(input: &str) -> Result<Vec<(String, ValueType)>, Vec<Error>> {
     let len = input.len();
 
     let (lexed, errs) = lexer::lexer().parse_recovery(input);
@@ -323,7 +337,7 @@ mod tests {
 
     #[test]
     fn interpret_assign_chain() {
-        let interpreted = interpret("these = are = all = 12;".to_owned()).unwrap();
+        let interpreted = interpret("these = are = all = 12;").unwrap().values;
         let value = Value::Num(12.0);
 
         assert_eq!(interpreted.get("these").unwrap(), &value);

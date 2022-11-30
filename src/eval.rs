@@ -71,39 +71,39 @@ pub fn eval<T: AsRef<Spanned>>(
         }
         Spanned(Expr::InfixOp(lhs, op, rhs), span) => {
             let mut inputs = Vec::new();
+            let lhs_span = lhs.1.clone();
+            let rhs_span = rhs.1.clone();
 
             let lhs = eval(lhs, vars.clone());
             let lhs = match lhs {
-                Err(e) => {
-                    errors.extend(e);
-
-                    SpannedValue(Value::Error, 0..1)
-                }
                 Ok(e) => {
                     inputs.extend(e.1);
                     e.0.clone()
+                }
+                Err(e) => {
+                    errors.extend(e);
+
+                    SpannedValue(Value::Error, lhs_span)
                 }
             };
 
             let rhs = eval(rhs, vars);
             let rhs = match rhs {
-                Err(e) => {
-                    errors.extend(e);
-
-                    SpannedValue(Value::Error, 0..1)
-                }
-                Ok((SpannedValue(Value::Input(name, kind, value), _), inputs_out)) => {
-                    match *value {
-                        Value::None => Ok((
-                            SpannedValue(Value::None, span.clone()),
-                            vec![(name.clone(), kind)],
-                        )),
-                        _ => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
+                Ok((SpannedValue(Value::Input(name, kind, value), _), _)) => match *value {
+                    Value::None => {
+                        inputs.push((name, kind));
+                        SpannedValue(Value::None, span.clone())
                     }
-                }
+                    _ => SpannedValue(*value, span.clone()),
+                },
                 Ok(e) => {
                     inputs.extend(e.1);
                     e.0.clone()
+                }
+                Err(e) => {
+                    errors.extend(e);
+
+                    SpannedValue(Value::Error, rhs_span)
                 }
             };
 
@@ -215,7 +215,10 @@ pub fn eval<T: AsRef<Spanned>>(
             Some(out) => match out {
                 Value::Input(name, kind, value) => match **value {
                     Value::None => Ok((
-                        SpannedValue(Value::None, span.clone()),
+                        SpannedValue(
+                            Value::Input(name.clone(), *kind, value.clone()),
+                            span.clone(),
+                        ),
                         vec![(name.clone(), *kind)],
                     )),
                     _ => Ok((SpannedValue(out.clone(), span.clone()), Vec::new())),
@@ -241,6 +244,8 @@ pub fn eval<T: AsRef<Spanned>>(
             span,
         ) => {
             let evaluated = eval(condition, vars.clone())?;
+
+            dbg!(&evaluated);
 
             let out = match evaluated.0.clone() {
                 SpannedValue(Value::Bool(enter), _) => {
@@ -289,13 +294,17 @@ pub fn eval<T: AsRef<Spanned>>(
 
             out
         }
-        Spanned(Expr::Input(name, kind), span) => Ok((
-            SpannedValue(
-                Value::Input(name.clone(), *kind, Box::new(Value::None)),
-                span.clone(),
-            ),
-            Vec::new(),
-        )),
+        Spanned(Expr::Input(name, kind), span) => {
+            dbg!(&name, &kind);
+
+            Ok((
+                SpannedValue(
+                    Value::Input(name.clone(), *kind, Box::new(Value::None)),
+                    span.clone(),
+                ),
+                Vec::new(),
+            ))
+        }
         _ => todo!(),
     }
 }
