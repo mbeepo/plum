@@ -1,9 +1,23 @@
+use std::collections::HashMap;
+
 use chumsky::{Parser, Stream};
 
-use crate::{error::Error, interpreter::Output, lexer, parser};
+use crate::{error::Error, interpreter::VarStore, lexer, parser};
 
-impl Output {
-    fn set_input(name: &str, value: &str) -> Result<Self, Vec<Error>> {
+impl VarStore {
+    pub fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+            inputs: Vec::new(),
+            deps: HashMap::new(),
+            dependents: HashMap::new(),
+            source: HashMap::new(),
+            cached: HashMap::new(),
+            intermediate: HashMap::new(),
+        }
+    }
+
+    pub fn set_input(name: &str, value: &str) -> Result<Self, Vec<Error>> {
         let len = value.len();
 
         let (lexed, errs) = lexer::lexer().parse_recovery(value);
@@ -22,6 +36,8 @@ impl Output {
                 .collect());
         }
 
-        let parsed = parsed.unwrap()[0];
+        let parsed = &parsed.unwrap()[0];
+
+        Ok(Self::new())
     }
 }

@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    hash::Hash,
+};
 
 use chumsky::{Parser, Stream};
 
@@ -34,19 +37,17 @@ impl From<String> for SpannedIdent {
 }
 
 #[derive(Clone, Debug)]
-pub struct FullOutput {
-    pub output: Output,
-    pub deps: HashMap<String, Vec<String>>,
-    pub source: HashMap<String, String>,
+pub struct VarStore {
+    pub(crate) values: HashMap<String, Value>, // cached values
+    pub(crate) inputs: Vec<(String, ValueType)>, // all inputs with their types
+    pub(crate) deps: HashMap<String, Vec<String>>, // variables that each variable depends on
+    pub(crate) dependents: HashMap<String, Vec<String>>, // inverse of deps, variables that depend on each variable
+    pub(crate) source: HashMap<String, String>, // generated source for each variable, so it can be serialized easier
+    pub(crate) cached: HashMap<String, bool>,   // whether the cached value for a variable is valid
+    pub(crate) intermediate: HashMap<String, HashMap<String, Expr>>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Output {
-    pub values: HashMap<String, Value>,
-    pub inputs: Vec<(String, ValueType)>,
-}
-
-pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
+pub fn interpret(input: &str) -> Result<VarStore, Vec<Error>> {
     let len = input.len();
 
     let (lexed, errs) = lexer::lexer().parse_recovery(input);
@@ -70,7 +71,9 @@ pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
     let mut spans: HashMap<String, Span> = HashMap::new();
     let mut errs: Vec<Error> = Vec::new();
     let mut deps: HashMap<String, (Vec<String>, Span)> = HashMap::new();
+    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
     let mut out_deps: HashMap<String, Vec<String>> = HashMap::new();
+    let mut cached: HashMap<String, bool> = HashMap::new();
 
     // check dependencies of variables
     for expr in parsed.iter() {
@@ -90,6 +93,17 @@ pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
                         spans.insert(name.clone(), span.clone());
                         deps.insert(name.to_owned(), (value_deps.clone(), span.clone()));
                         out_deps.insert(name.to_owned(), value_deps.clone());
+                        cached.insert(name.to_owned(), true);
+
+                        for dep in value_deps.clone() {
+                            if let Some(item) = dependents.get_mut(&dep) {
+                                item.push(name.to_owned());
+                            } else {
+                                let item = vec![name.to_owned()];
+
+                                dependents.insert(dep, item);
+                            }
+                        }
                     }
                 }
             }
@@ -105,6 +119,7 @@ pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
                     spans.insert(name.clone(), span.clone());
                     deps.insert(name.to_owned(), (Vec::new(), span.clone()));
                     out_deps.insert(name.to_owned(), Vec::new());
+                    cached.insert(name.to_owned(), false);
                 }
             }
             _ => {}
@@ -199,25 +214,16 @@ pub fn interpret_full(input: &str) -> Result<FullOutput, Vec<Error>> {
     if errs.len() > 0 {
         Err(errs)
     } else {
-        Ok(FullOutput {
-            output: Output {
-                values: vars,
-                inputs,
-            },
+        Ok(VarStore {
+            values: vars,
+            inputs,
             deps: out_deps,
+            dependents,
             source,
+            cached,
+            intermediate: HashMap::new(),
         })
     }
-}
-
-pub fn interpret(input: &str) -> Result<Output, Vec<Error>> {
-    let FullOutput {
-        output,
-        deps: _,
-        source: _,
-    } = interpret_full(input)?;
-
-    Ok(output)
 }
 
 fn get_deps(expr: &Spanned) -> Vec<String> {

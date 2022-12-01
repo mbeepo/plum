@@ -6,12 +6,18 @@ use crate::{
     value::{SpannedValue, Value, ValueType},
 };
 
+#[derive(Clone, Debug)]
+pub struct Output {
+    pub value: SpannedValue,
+    pub inputs: Vec<(String, ValueType)>,
+    pub intermediates: HashMap<String, Expr>,
+}
+
 // returns either output and missing inputs, or an error
-pub fn eval<T: AsRef<Spanned>>(
-    input: T,
+pub fn eval(
+    input: &Spanned,
     vars: HashMap<String, Value>,
 ) -> Result<(SpannedValue, Vec<(String, ValueType)>), Vec<Error>> {
-    let input = input.as_ref();
     let mut errors: Vec<Error> = Vec::new();
 
     match input {
@@ -23,7 +29,7 @@ pub fn eval<T: AsRef<Spanned>>(
                 let new = e
                     .iter()
                     .map(|f| {
-                        let evaluated = eval(f.clone(), vars.clone());
+                        let evaluated = eval(f, vars.clone());
 
                         match evaluated {
                             Ok(e) => {
@@ -328,7 +334,7 @@ mod tests {
             .unwrap()
     }
 
-    fn evaluate<T: AsRef<Spanned>>(input: T) -> Result<SpannedValue, Vec<Error>> {
+    fn evaluate(input: &Spanned) -> Result<SpannedValue, Vec<Error>> {
         super::eval(input, HashMap::new()).map(|r| r.0)
     }
 
