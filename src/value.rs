@@ -1,8 +1,10 @@
 use std::{fmt::Display, ops::Range};
 
+use serde::Serialize;
+
 use crate::ast::Literal;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Value {
     Num(f64),
     String(String),
@@ -16,7 +18,7 @@ pub enum Value {
     None,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum ValueType {
     Num,
     Int,
@@ -32,7 +34,7 @@ pub enum ValueType {
     Null,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SpannedValue(pub Value, pub Range<usize>);
 
 impl From<ValueType> for Vec<ValueType> {

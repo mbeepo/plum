@@ -38,8 +38,8 @@ impl From<String> for SpannedIdent {
 
 #[derive(Clone, Debug)]
 pub struct VarStore {
-    pub(crate) values: HashMap<String, Value>, // cached values
-    pub(crate) inputs: Vec<(String, ValueType)>, // all inputs with their types
+    pub values: HashMap<String, Value>,            // cached values
+    pub(crate) inputs: Vec<(String, ValueType)>,   // all inputs with their types
     pub(crate) deps: HashMap<String, Vec<String>>, // variables that each variable depends on
     pub(crate) dependents: HashMap<String, Vec<String>>, // inverse of deps, variables that depend on each variable
     pub(crate) source: HashMap<String, String>, // generated source for each variable, so it can be serialized easier
