@@ -1,10 +1,11 @@
-use std::{fmt::Display, ops::Range};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use serde::Serialize;
 
 use crate::ast::Literal;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
 pub enum Value {
     Num(f64),
     String(String),
@@ -16,6 +17,12 @@ pub enum Value {
     IRange(Range<isize>),
     Input(String, ValueType, Box<Value>),
     None,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ValueMap {
+    #[serde(flatten)]
+    pub values: HashMap<String, Value>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
