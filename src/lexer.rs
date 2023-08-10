@@ -17,7 +17,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         .chain::<char, _, _>(exp.or_not().flatten())
         .collect::<String>()
         .map(Token::Num)
-        .labelled("num");
+        .labelled("num")
+        .boxed();
 
     // strings
     let escape = just('\\').ignore_then(
@@ -62,7 +63,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
     let string = d_string.or(s_string).map(Token::String).labelled("string");
 
     // operators
-    let op = one_of("+-*/!=<>&|.%")
+    let op = one_of("+-*/!=<>&|.%@$")
         .repeated()
         .at_least(1)
         .collect::<String>()
@@ -77,9 +78,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "else" => Token::Else,
         "true" => Token::Bool(true),
         "false" => Token::Bool(false),
-        "null" => Token::Null,
-        "and" => Token::Op("and".to_owned()),
-        "or" => Token::Op("or".to_owned()),
         "in" => Token::Op("in".to_owned()),
         _ => Token::Ident(ident),
     });
@@ -89,12 +87,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
 
     // type names
     let kind = choice::<_, Simple<char>>((
-        just("Num"),
-        just("Int"),
+        just("float"),
+        just("int"),
         just("String"),
-        just("Bool"),
-        just("Array"),
-        just("Any"),
+        just("bool"),
     ))
     .map(|name: &str| Token::Type(name.to_owned()));
 

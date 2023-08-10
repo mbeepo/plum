@@ -14,7 +14,6 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 Token::Num(e) => Expr::from(e.parse::<f64>().unwrap()),
                 Token::String(e) => Expr::from(e),
                 Token::Bool(e) => Expr::from(e),
-                Token::Null => Expr::Literal(Literal::Null),
             }
             .labelled("value")
             .map_with_span(Spanned);
@@ -153,10 +152,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs))
                 .boxed();
 
-            let op = choice((
-                just(Token::Op("and".to_owned())),
-                just(Token::Op("&&".to_owned())),
-            ))
+            let op = just(Token::Op("&&".to_owned()))
             .labelled("and")
             .to(InfixOp::And);
             let and = contains
@@ -164,10 +160,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 .then(op.then(contains).repeated())
                 .foldl(|lhs, (op, rhs)| spannify(lhs, op, rhs));
 
-            let op = choice((
-                just(Token::Op("or".to_owned())),
-                just(Token::Op("||".to_owned())),
-            ))
+            let op = just(Token::Op("||".to_owned()))
             .labelled("or")
             .to(InfixOp::Or);
             let or = and
@@ -221,7 +214,8 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                 names,
                 value: Box::new(val),
             })
-            .map_with_span(Spanned);
+            .map_with_span(Spanned)
+            .boxed();
 
         let input = just(Token::Input)
             .ignore_then(ident.clone())
@@ -234,8 +228,7 @@ pub fn parse() -> impl Parser<Token, Vec<Spanned>, Error = Simple<Token>> + Clon
                             "String" => ValueType::String,
                             "Bool" => ValueType::Bool,
                             "Array" => ValueType::Array,
-                            "Any" => ValueType::Any,
-                            &_ => unreachable!("Type token won't be made for other strings"),
+                            _ => unreachable!("Type token won't be made for other strings"),
                         },
                     })
                     .or_not(),

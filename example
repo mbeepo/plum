@@ -1,0 +1,242 @@
+```
+scores {
+    common! {
+        in self: int = 10 where @ >= 0 && @ <= 30;
+    }
+
+    Labeled("Strength") str;
+    Labeled("Dexterity") dex;
+    Labeled("Constitution") con;
+    Labeled("Intelligence") int;
+    Labeled("Wisdom") wis;
+    Labeled("Charisma") cha;
+}
+
+modifiers {
+    common! {
+        const name = ident!();
+        const source = concat!(["scores.", name]);
+        pub out self: int = ($source - 10) / 2;
+    }
+
+    Labeled("STR") str;
+    Labeled("DEX") dex;
+    Labeled("CON") con;
+    Labeled("INT") int;
+    Labeled("WIS") wis;
+    Labeled("CHA") cha;
+}
+
+pub Labeled("Level") level: int = 1 where @ >= 1 && @ <= 30;
+
+hp {
+    pub out Labeled("Health") self = sum(parts);
+
+    parts: [int] = [
+        common! {
+            self = self + con;
+        },
+        12,
+        repeat(1d12, level - 1),
+    ]
+}
+```
+-> Ast {
+    Group("scores", [
+        GroupMacro("common", [
+            InputInt { name: "self", default: 10, min: 0, max: 31 }
+        ]),
+        Labeled(Leaf("str"), "Strength),
+        Labeled(Leaf("dex"), "Dexterity"),
+        Labeled(Leaf("con"), "Constitution"),
+        Labeled(Leaf("int"), "Intelligence"),
+        Labeled(Leaf("wis"), "Wisdom"),
+        Labeled(Leaf("cha"), "Charisma")
+    ]),
+    Group("modifiers", [
+        GroupMacro("common", [
+            Assign(Leaf("name"), Macro("ident", [])),
+            Assign(Leaf("source"), Macro("concat", ["scores.", Ref("name")])),
+            Public(
+                OutputInt { name: "self", value: Div(Sub(IdentRef("source"), Int(10)), Int(2)) }
+            )
+        ]),
+        Labeled(Leaf("str"), "STR"),
+        Labeled(Leaf("dex"), "DEX"),
+        Labeled(Leaf("con"), "CON"),
+        Labeled(Leaf("int"), "INT"),
+        Labeled(Leaf("wis"), "WIS"),
+        Labeled(Leaf("cha"), "CHA")
+    ]),
+    Public(InputInt { name: "level", default: 1, min: 1, max: 31 }),
+    Group("hp", [
+        Public(
+            OutputInt { name: "self", value: Function("sum", [Ref("parts")]) },
+        )
+        Assign(Leaf("parts", IntList([
+            GroupMacro("common", [
+                Assign(Leaf("self"), Add(Ref("self"), Ref("con"))),
+            ]),
+            Int(12),
+            Function("repeat", [IntRoll(1, 12), Sub(Ref("level"), Int(1))])
+        ])))
+    ])
+}
+-> Macro Eval {
+    Group("scores", [
+        InputInt { name: "str", default: 10, min: 0, max: 31, label: "Strength" },
+        InputInt { name: "dex", default: 10, min: 0, max: 31, label: "Dexterity" },
+        InputInt { name: "con", default: 10, min: 0, max: 31, label: "Constitution" },
+        InputInt { name: "int", default: 10, min: 0, max: 31, label: "Intelligence" },
+        InputInt { name: "wis", default: 10, min: 0, max: 31, label: "Wisdom" },
+        InputInt { name: "cha", default: 10, min: 0, max: 31, label: "Charisma" },
+    ]),
+    Group("modifiers", [
+        Public(OutputInt { name: "str", value: Div(Sub(Ref("scores.str"), Int(10)), Int(2)), label: "STR" }),
+        Public(OutputInt { name: "dex", value: Div(Sub(Ref("scores.dex"), Int(10)), Int(2)), label: "DEX" }),
+        Public(OutputInt { name: "con", value: Div(Sub(Ref("scores.con"), Int(10)), Int(2)), label: "CON" }),
+        Public(OutputInt { name: "int", value: Div(Sub(Ref("scores.int"), Int(10)), Int(2)), label: "INT" }),
+        Public(OutputInt { name: "wis", value: Div(Sub(Ref("scores.wis"), Int(10)), Int(2)), label: "WIS" }),
+        Public(OutputInt { name: "cha", value: Div(Sub(Ref("scores.cha"), Int(10)), Int(2)), label: "CHA" }),
+    ]),
+    Public(InputInt { name: "level", default: 1, min: 1, max: 31, label: "Level" }),
+    Group("hp", [
+        Public(OutputInt { name: "self", value: Function("sum", [Ref("parts")]), label: "Health" }),
+        Assign(Leaf("parts"), IntList([
+            Add(Int(12), Ref("con")),
+            Function("repeat", [Add(IntRoll(1, 12), Ref("con")), Sub(Ref("level"), Int(1))])
+        ]))
+    ])
+}
+-> Name Resolution {
+    InputInt { name: "str", id: 1, default: 10, min: 0, max: 31, label: "Strength" },
+    InputInt { name: "dex", id: 2, default: 10, min: 0, max: 31, label: "Dexterity" },
+    InputInt { name: "con", id: 3, default: 10, min: 0, max: 31, label: "Constitution" },
+    InputInt { name: "int", id: 4, default: 10, min: 0, max: 31, label: "Intelligence" },
+    InputInt { name: "wis", id: 5, default: 10, min: 0, max: 31, label: "Wisdom" },
+    InputInt { name: "cha", id: 6, default: 10, min: 0, max: 31, label: "Charisma" },
+    OutputInt { name: "str", id: 7, value: Div(Sub(Ref(1), Int(10)), Int(2)), label: "STR" },
+    OutputInt { name: "dex", id: 8, value: Div(Sub(Ref(2), Int(10)), Int(2)), label: "DEX" },
+    OutputInt { name: "con", id: 9, value: Div(Sub(Ref(3), Int(10)), Int(2)), label: "CON" },
+    OutputInt { name: "int", id: 10, value: Div(Sub(Ref(4), Int(10)), Int(2)), label: "INT" },
+    OutputInt { name: "wis", id: 11, value: Div(Sub(Ref(5), Int(10)), Int(2)), label: "WIS" },
+    OutputInt { name: "cha", id: 12, value: Div(Sub(Ref(6), Int(10)), Int(2)), label: "CHA" },
+    InputInt { name: "level", id: 13, default: 1, min: 1, max: 31, label: "Level" },
+    OutputInt {
+        name: "hp",
+        id: 14,
+        value: SumIntList([
+            Add(Int(12), Ref(9)),
+            RepeatInt(Add(IntRoll(1, 12), Ref("con")), Sub(Ref("level"), Int(1)))
+        ]),
+        label: "Health"
+    },
+}
+-> Dependency Resolution {
+    InputInt { name: "str", id: 1, default: 10, min: 0, max: 31, label: "Strength" },
+    InputInt { name: "dex", id: 2, default: 10, min: 0, max: 31, label: "Dexterity" },
+    InputInt { name: "con", id: 3, default: 10, min: 0, max: 31, label: "Constitution" },
+    InputInt { name: "int", id: 4, default: 10, min: 0, max: 31, label: "Intelligence" },
+    InputInt { name: "wis", id: 5, default: 10, min: 0, max: 31, label: "Wisdom" },
+    InputInt { name: "cha", id: 6, default: 10, min: 0, max: 31, label: "Charisma" },
+    OutputInt { name: "str", id: 7, value: Div(Sub(Ref(1), Int(10)), Int(2)), dependencies: [ 1 ], label: "STR" },
+    OutputInt { name: "dex", id: 8, value: Div(Sub(Ref(2), Int(10)), Int(2)), dependencies: [ 2 ], label: "DEX" },
+    OutputInt { name: "con", id: 9, value: Div(Sub(Ref(3), Int(10)), Int(2)), dependencies: [ 3 ], label: "CON" },
+    OutputInt { name: "int", id: 10, value: Div(Sub(Ref(4), Int(10)), Int(2)), dependencies: [ 4 ], label: "INT" },
+    OutputInt { name: "wis", id: 11, value: Div(Sub(Ref(5), Int(10)), Int(2)), dependencies: [ 5 ], label: "WIS" },
+    OutputInt { name: "cha", id: 12, value: Div(Sub(Ref(6), Int(10)), Int(2)), dependencies: [ 6 ], label: "CHA" },
+    InputInt { name: "level", id: 13, default: 1, min: 1, max: 31, label: "Level" },
+    OutputInt {
+        name: "hp",
+        id: 14,
+        value: SumIntList([
+            Add(Int(12), Ref(9)),
+            RepeatInt(Add(IntRoll(1, 12), Ref(9)), Sub(Ref(13), Int(1)))
+        ]),
+        dependencies: [ 13, 9 ],
+        label: "Health"
+    },
+}
+-> IR
+```
+-- Defaults
+MOV r1, 10; -- strength
+MOV r2, 10; -- dexterity
+MOV r3, 10; -- constitution
+MOV r4, 10; -- intelligence
+MOV r5, 10; -- wisdom
+MOV r6, 10; -- charisma
+MOV r7, 1;  -- level
+
+-- Inputs
+INB r1, 0, 31; -- strength
+INB r2, 0, 31; -- dexterity
+INB r3, 0, 31; -- constitution
+INB r4, 0, 31; -- intelligence
+INB r5, 0, 31; -- wisdom
+INB r6, 0, 31; -- charisma
+INB r7, 1, 31; -- level
+
+-- modifiers
+ON r1, 2;
+SUBI r8, r1, 10;    -- str
+DIVI r8, r8, 2;
+
+ON r2, 2;
+SUBI r9, r2, 10;    -- dex
+DIVI r9, r9, 2;
+
+ON r3, 2;
+SUBI r10, r3, 10;   -- con
+DIVI r10, r10, 2;
+
+ON r4, 2;
+SUBI r11, r4, 10;   -- int
+DIVI r11, r11, 2;
+
+ON r5, 2;
+SUBI r12, r5, 10;   -- wis
+DIVI r12, r12, 2;
+
+ON r6, 2;
+SUBI r13, r6, 10;   -- cha
+DIVI r13, r13, 2;
+
+-- health
+ON r10, 9;
+ADDI r14, r10, 12;  -- base hp
+MOV r15, 1;     -- cache index
+ON r7, 6; -- execute on r7 (level) change
+JGTE r7, r15, end;  -- skip loop if cache index is already higher than level
+hploop:
+    ROLL r16, 1, 6, r15;    -- roll 1d6 into r16, using r15 as the cache index
+    ADDI r15, r15, 1;   -- increment cache index
+    ADD r14, r14, r16;  -- add roll to total health
+    JLT r15, r7, hploop;    -- repeat until cache index reaches level
+end:
+    NOP;
+    OUT r8;
+    OUT r9;
+    OUT r10;
+    OUT r11;
+    OUT r12;
+    OUT r13;
+```
+&&
+```
+r1: "Strength";
+r2: "Dexterity";
+r3: "Constitution";
+r4: "Intelligence";
+r5: "Wisdom";
+r6: "Charisma";
+r7: "Level";
+r8: "STR";
+r9: "DEX";
+r10: "CON";
+r11: "INT";
+r12: "WIS";
+r13: "CHA";
+r14: "Health";
+```
+-> Bytecode

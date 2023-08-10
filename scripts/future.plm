@@ -1,0 +1,41 @@
+scores {
+    common! {
+        in self: int = 10 where @ >= 0 && @ <= 30;
+    }
+
+    Labeled("Strength") str;
+    Labeled("Dexterity") dex;
+    Labeled("Constitution") con;
+    Labeled("Intelligence") int;
+    Labeled("Wisdom") wis;
+    Labeled("Charisma") cha;
+}
+
+modifiers {
+    common! {
+        const name = ident!();
+        const source = concat!(["scores.", name]);
+        pub out self: int = ($source - 10) / 2;
+    }
+
+    Labeled("STR") str;
+    Labeled("DEX") dex;
+    Labeled("CON") con;
+    Labeled("INT") int;
+    Labeled("WIS") wis;
+    Labeled("CHA") cha;
+}
+
+pub Labeled("Level") level: int = 1 where @ >= 1 && @ <= 30;
+
+hp {
+    pub out Labeled("Health") self = sum(parts);
+
+    parts: [int] = [
+        common! {
+            self = self + con;
+        },
+        12,
+        repeat(1d12, level - 1),
+    ]
+}
